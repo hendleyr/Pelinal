@@ -8,10 +8,12 @@ if (!Detector.webgl) {
 var container, stats;
 var camera, controls, scene, renderer;
 var mesh, texture;
+var boat;
 var skyboxCamera, skyboxScene;
 var waterCamera, waterScene, waterGeometry, waterTexture, waterMesh;
 var waterUniforms;
-var directionalLight
+var directionalLight;
+var v2Wave;
 
 var worldWidth = 256, worldDepth = 256,
 worldHalfWidth = worldWidth / 2, worldHalfDepth = worldDepth / 2;
@@ -72,6 +74,31 @@ function init() {
 	// SKYBOX and WATER
 	initSkybox();
 	initWater();
+
+	//BOAT
+	var manager = new THREE.LoadingManager();
+	manager.onProgress = function ( item, loaded, total ) {
+
+		console.log( item, loaded, total );
+
+	};
+	var loader = new THREE.OBJLoader( manager );
+	loader.load( 'models/boat.obj', function ( object ) {
+		boat = object;
+		object.traverse( function ( child ) {
+
+			// if ( child instanceof THREE.Mesh ) {
+
+				// child.material.map = texture;
+
+			// }
+
+		} );
+
+		object.position.y = 80;
+		scene.add( object );
+
+	} );
 
 	window.addEventListener('resize', onWindowResize, false);
 
@@ -208,7 +235,7 @@ function initWater() {
 	}
 	waterGeometry.elementsNeedUpdate = true;
 	waterGeometry.verticesNeedUpdate = true;
-	
+	v2Water = new THREE.Vector2(0.5,0.5).normalize();
 	//waterGeometry = new THREE.PlaneGeometry(200000, 200000, worldWidth - 1, worldDepth - 1);
 	//waterGeometry.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI/2));
 	
@@ -255,19 +282,25 @@ function animate() {
 }
 
 function waveDisplacement() {
-	var amp = 500;
+	var amp = 300;
 	var t = clock.elapsedTime;
 	
+	
 	for( var i =0; i < waterGeometry.vertices.length; ++i) {
-		
-		waterGeometry.vertices[i].y = amp * Math.sin(0.0002 * waterGeometry.vertices[i].x - t);
+		var vert = waterGeometry.vertices[i];
+		var wvPoint = new THREE.Vector2(vert.x, vert.z);
+		//waterGeometry.vertices[i].y = amp * Math.sin(v2Water.dot(wvPoint) * 0.0002 - t);
+		//waterGeometry.vertices[i].y = amp * Math.sin(vert.x * 0.0002  - t);
+		waterGeometry.vertices[i].y = amp * Math.sin(vert.x * 0.0002  - t);
+		waterGeometry.vertices[i].y += amp * Math.sin(vert.z * 0.0002  - t);
 		
 	}
-	waterGeometry.computeFaceNormals();
-	waterGeometry.computeVertexNormals();
 	
+	waterGeometry.computeFaceNormals();
+	waterGeometry.computeVertexNormals();	
 	waterGeometry.verticesNeedUpdate = true;
 	waterGeometry.normalsNeedUpdate = true;
+	boat.position.y = waterGeometry.vertices[0].y - 200;
 }
 
 function render() {
