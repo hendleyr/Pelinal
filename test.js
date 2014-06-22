@@ -185,23 +185,21 @@ function initSkybox() {
 }
 
 function initWater() {
+	var waterTexture = THREE.ImageUtils.loadTexture("textures/water1024.png");
+	waterTexture.premultiplyAlpha = false;
+	waterTexture.wrapS = THREE.RepeatWrapping;
+	waterTexture.wrapT = THREE.RepeatWrapping;
+	waterTexture.offset = 1.0;
+	waterTexture.minFilter = THREE.NearestFilter;
+	waterTexture.magFilter = THREE.NearestFilter;
+
 	 waterUniforms = {
 		amplitude: { type: "f", value: 500.0 },
-		frequency: { type: "f", value: 0.0002 },
+		frequency: { type: "f", value: 0.0001 },
 		time: { type: "f", value: 1.0 },
-		map: { type: "t", value: THREE.ImageUtils.loadTexture( "textures/water1024.png" ) }
+		wave: { type: "t", value: waterTexture }
 	 };
-
-	// var waterTexture = THREE.ImageUtils.loadTexture("textures/water1024.png");
-	// waterTexture.premultiplyAlpha = false;
-	// waterTexture.wrapS = THREE.RepeatWrapping;
-	// waterTexture.wrapT = THREE.RepeatWrapping;
-	// waterTexture.repeat.x = 32;
-	// waterTexture.repeat.y = 32;
-	//waterTexture.generateMipmaps = false;
-	//waterTexture.minFilter = THREE.NearestFilter;
-	//waterTexture.magFilter = THREE.NearestFilter;
-	
+	 
 	//GEOMETRY
 	var radii = [0, 10, 40, 90, 160, 250, 360, 490, 640, 810, 1000, 1210, 1440, 1690, 1960, 2250, 2560, 2890, 3240, 3610, 4000, 4410, 4840, 5290, 5760, 6250, 6760, 7290, 7840, 8410, 9000, 9610, 10240, 10890, 11560, 12250, 12960, 13690, 14440, 15210, 16000, 16810, 17640, 18490, 19360, 20250, 21160, 22090, 23040, 24010, 25000, 26010, 27040, 28090, 29160, 30250, 31360, 32490, 33640, 34810, 36000, 37210, 38440, 39690];
 
@@ -236,7 +234,7 @@ function initWater() {
 		[ 	"uniform float amplitude;",
 			"uniform float frequency;",
 			"uniform float time;",
-			"uniform sampler2D map;",
+			"uniform sampler2D wave;",
 			//"varying vec3 vColor;",
 			"varying vec4 wvLightFront;",
 			"varying vec3 triplaneNormal;",
@@ -245,24 +243,27 @@ function initWater() {
 			"varying vec2 yzUv;",
 
 			"void main() {",
+			"vec3 lightVector = normalize( vec3( 0.8, .3, 0.0 ) );",
+			"vec4 lightColor = vec4( 0.0,0.2,0.5,1.0 );",
 			//triplanar mapping
 			"xyUv = vec2(position.x, position.y);",
 			"xzUv = vec2(position.x, position.z);",
 			"yzUv = vec2(position.y, position.z);",
 			
-			"	wvLightFront = vec4(1,1,1,1);",
-			"	vec4 mvPosition = vec4(position, 1.0);",
-			"	mvPosition.y = amplitude * ( sin( position.x * frequency - time ) + sin( position.z * frequency - time ) );",
-			"	vec3 triplaneNormal = cross( vec3(1, amplitude * frequency * cos(time - frequency * mvPosition.x), 0),",
-			"							vec3(0, amplitude * frequency * cos(time - frequency * mvPosition.z), 1));",
-			"	normalize(triplaneNormal);",
-			"	wvLightFront = -dot( normalize( vec3( 0.8, .3, 0.0 ) ), triplaneNormal ) * vec4( 0.0,0.2,0.5,1.0 );",
-			"	mvPosition = modelViewMatrix * mvPosition;",
-			"	gl_Position = projectionMatrix * mvPosition;",
+			"wvLightFront = vec4(1,1,1,1);",
+			"vec4 mvPosition = vec4(position, 1.0);",
+			"mvPosition.y = amplitude * ( sin( position.x * frequency - time ) + sin( position.z * frequency - time ) );",
+			"triplaneNormal = (cross( vec3(1, amplitude * frequency * cos(time - frequency * mvPosition.x), 0),",
+			"							vec3(0, amplitude * frequency * cos(time - frequency * mvPosition.z), 1)));",
+			//"triplaneNormal = normalize(triplaneNormal);",
+			"wvLightFront = -dot( lightVector, normalize(triplaneNormal )) * lightColor;",	// * 
+			"mvPosition = modelViewMatrix * mvPosition;",
+			"gl_Position = projectionMatrix * mvPosition;",
 			"}"
 		].join("\n"),
 		fragmentShader: 
-		[	"uniform sampler2D map;",
+		[	"uniform float time;",
+			"uniform sampler2D wave;",
 			"varying vec4 wvLightFront;",
 			"varying vec3 triplaneNormal;",
 			"varying vec2 xyUv;",
@@ -270,7 +271,23 @@ function initWater() {
 			"varying vec2 yzUv;",
 			
 			"void main() {",
-			"	gl_FragColor =  wvLightFront;",
+			//"	gl_FragColor =  wvLightFront;",		//simple shading
+			"vec3 trip = abs( triplaneNormal.xyz );",   // Tighten up the blending zone:  
+			//"trip = (trip - vec3(0.2, 0.0, 0.2)) * 7.0;", 
+			"trip = max(trip, 0.0);",      						
+			"trip /= (trip.x + trip.y + trip.z );",			// Force weights to sum to 1.0 (very important!)  
+			
+			//"vec2 xy = fract(xyUv/5000.0);",
+			"vec2 xz = vec2(xzUv.x + time*300.0, xzUv.y);",
+			"xz = fract(xz/5000.0);",
+			//"	xz = fract(xz);",
+			//"vec2 yz = fract(yzUv/5000.0);",
+			//"	gl_FragColor = texture2D(wave, xz) * wvLightFront * vec4(2.8,2.8,2.8,1);",
+			//"	gl_FragColor = vec4(gl_FragColor.r, gl_FragColor.g, gl_FragColor.b, 1.0);",
+			"gl_FragColor = (trip.y * texture2D(wave, xz)) * wvLightFront * vec4(2.8,2.8,2.8,1);",
+			// "gl_FragColor = (trip.x * texture2D(wave, yz))",		//dead 3planar mapping
+			// "		+ (trip.y * texture2D(wave, xz));",
+			// "		+ (trip.z * texture2D(wave, xy));",
 			"}"	
 		].join("\n")
 	}));
