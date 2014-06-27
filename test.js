@@ -9,9 +9,7 @@ var container, stats;
 var camera, controls, scene, renderer;
 var mesh, texture;
 var boat;
-var skyboxCamera, skyboxScene;
-var waterCamera, waterScene, waterGeometry, waterTexture, waterMesh;
-var waterUniforms;
+var skybox, ocean;
 var directionalLight;
 
 var worldWidth = 256, worldDepth = 256,
@@ -25,6 +23,17 @@ animate();
 function init() {
 
 	container = document.getElementById('container');
+	renderer = new THREE.WebGLRenderer();
+	renderer.setClearColor(0xbfd1e5);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.autoClear = false;
+	container.innerHTML = "";
+	container.appendChild(renderer.domElement);
+
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.top = '0px';
+	container.appendChild(stats.domElement);
 
 	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 39690);
 
@@ -71,9 +80,10 @@ function init() {
 	mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture, wrapAround: true, wrapRPG: 0xFF0000 }));
 	//scene.add(mesh);
 
-	// SKYBOX and WATER
-	initSkybox();
-	initWater();
+	//SKYBOX and WATER
+	skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png" );
+	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
+	scene.add( ocean._mesh );
 
 	//BOAT
 	var manager = new THREE.LoadingManager();
@@ -87,32 +97,15 @@ function init() {
 		boat = object;
 		object.traverse( function ( child ) {
 
-			// if ( child instanceof THREE.Mesh ) {
-
-				// child.material.map = texture;
-
-			// }
-
 		} );
 
 		object.position.y = 80;
 		scene.add( object );
+		ocean.floatObject( boat );
 
 	} );
 
 	window.addEventListener('resize', onWindowResize, false);
-
-	renderer = new THREE.WebGLRenderer();
-	renderer.setClearColor(0xbfd1e5);
-	renderer.setSize(window.innerWidth, window.innerHeight);
-	renderer.autoClear = false;
-	container.innerHTML = "";
-	container.appendChild(renderer.domElement);
-
-	stats = new Stats();
-	stats.domElement.style.position = 'absolute';
-	stats.domElement.style.top = '0px';
-	container.appendChild(stats.domElement);
 
 }
 
@@ -156,145 +149,6 @@ function generateHeight(width, height) {
 
 }
 
-function initSkybox() {
-	skyboxCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3);
-	skyboxCamera.quaternion = camera.quaternion;
-	skyboxScene = new THREE.Scene();
-
-	skyboxGeometry = new THREE.BoxGeometry(4, 1, 4);
-	skyboxGeometry.faces.splice(4,4);
-	skyboxGeometry.applyMatrix(new THREE.Matrix4().makeTranslation(0, 0.5, 0));
-	skyboxGeometry.elementsNeedUpdate = true;
-	skyboxGeometry.verticesNeedUpdate = true;
-
-	skyboxTexture = THREE.ImageUtils.loadTexture("textures/mountains.png", THREE.UVMapping);
-	skyboxTexture.premultiplyAlpha = true;
-	//skyboxTexture.generateMipmaps = false;
-
-	skyboxMesh = new THREE.Mesh(skyboxGeometry, new THREE.MeshLambertMaterial({
-		shading: THREE.FlatShading,
-		transparent: true,
-		emissive: new THREE.Color(0xffffff),
-		fog: false,
-		map: skyboxTexture,
-		depthTest: false,
-		depthWrite: false,
-		side: THREE.BackSide
-	}));
-	skyboxScene.add(skyboxMesh);
-}
-
-function initWater() {
-	var waterTexture = THREE.ImageUtils.loadTexture("textures/water1024.png");
-	waterTexture.premultiplyAlpha = false;
-	waterTexture.wrapS = THREE.RepeatWrapping;
-	waterTexture.wrapT = THREE.RepeatWrapping;
-	waterTexture.offset = 1.0;
-	waterTexture.minFilter = THREE.NearestFilter;
-	waterTexture.magFilter = THREE.NearestFilter;
-
-	 waterUniforms = {
-		amplitude: { type: "f", value: 500.0 },
-		frequency: { type: "f", value: 0.0001 },
-		time: { type: "f", value: 1.0 },
-		wave: { type: "t", value: waterTexture }
-	 };
-	 
-	//GEOMETRY
-	var radii = [0, 10, 40, 90, 160, 250, 360, 490, 640, 810, 1000, 1210, 1440, 1690, 1960, 2250, 2560, 2890, 3240, 3610, 4000, 4410, 4840, 5290, 5760, 6250, 6760, 7290, 7840, 8410, 9000, 9610, 10240, 10890, 11560, 12250, 12960, 13690, 14440, 15210, 16000, 16810, 17640, 18490, 19360, 20250, 21160, 22090, 23040, 24010, 25000, 26010, 27040, 28090, 29160, 30250, 31360, 32490, 33640, 34810, 36000, 37210, 38440, 39690];
-
-	waterGeometry = new THREE.Geometry();
-	
-	for(var j = 0; j < 64; j++) {	//orig. 512
-		for (var i = 0; i < 64; i++) {
-			var A = (i*Math.PI*2.0)/64.0;
-			var dX = Math.cos(A), dY = Math.sin(A);
-			
-			waterGeometry.vertices.push(new THREE.Vector3(dX*radii[j], 0, dY*radii[j]));
-		}
-	}
-
-	for (var i = 0; i < 64+1; i++) {
-		for(j = 0; j < 64-1; j++) {
-			var Ind = [j*64+(i%64), (j+1)*64+(i%64), (j+1)*64+((i+1)%64), (j)*64+((i+1)%64)];
-			
-			waterGeometry.faces.push(new THREE.Face3(Ind[2], Ind[1], Ind[0], new THREE.Vector3(0,1,0)));
-			waterGeometry.faces.push(new THREE.Face3(Ind[3], Ind[2], Ind[0], new THREE.Vector3(0,1,0)));
-			
-		}
-	}
-	waterGeometry.elementsNeedUpdate = true;
-	waterGeometry.verticesNeedUpdate = true;
-
-	waterMesh = new THREE.Mesh(waterGeometry, new THREE.ShaderMaterial({
-		uniforms: waterUniforms,
-		shading: THREE.SmoothShading,
-		//color: new THREE.Color(0x0067aa),
-		vertexShader: 
-		[ 	"uniform float amplitude;",
-			"uniform float frequency;",
-			"uniform float time;",
-			"uniform sampler2D wave;",
-			//"varying vec3 vColor;",
-			"varying vec4 wvLightFront;",
-			"varying vec3 triplaneNormal;",
-			"varying vec2 xyUv;",
-			"varying vec2 xzUv;",
-			"varying vec2 yzUv;",
-
-			"void main() {",
-			"vec3 lightVector = normalize( vec3( 0.8, .3, 0.0 ) );",
-			"vec4 lightColor = vec4( 0.0,0.2,0.5,1.0 );",
-			//triplanar mapping
-			"xyUv = vec2(position.x, position.y);",
-			"xzUv = vec2(position.x, position.z);",
-			"yzUv = vec2(position.y, position.z);",
-			
-			"wvLightFront = vec4(1,1,1,1);",
-			"vec4 mvPosition = vec4(position, 1.0);",
-			"mvPosition.y = amplitude * ( sin( position.x * frequency - time ) + sin( position.z * frequency - time ) );",
-			"triplaneNormal = (cross( vec3(1, amplitude * frequency * cos(time - frequency * mvPosition.x), 0),",
-			"							vec3(0, amplitude * frequency * cos(time - frequency * mvPosition.z), 1)));",
-			//"triplaneNormal = normalize(triplaneNormal);",
-			"wvLightFront = -dot( lightVector, normalize(triplaneNormal )) * lightColor;",	// * 
-			"mvPosition = modelViewMatrix * mvPosition;",
-			"gl_Position = projectionMatrix * mvPosition;",
-			"}"
-		].join("\n"),
-		fragmentShader: 
-		[	"uniform float time;",
-			"uniform sampler2D wave;",
-			"varying vec4 wvLightFront;",
-			"varying vec3 triplaneNormal;",
-			"varying vec2 xyUv;",
-			"varying vec2 xzUv;",
-			"varying vec2 yzUv;",
-			
-			"void main() {",
-			//"	gl_FragColor =  wvLightFront;",		//simple shading
-			"vec3 trip = abs( triplaneNormal.xyz );",   // Tighten up the blending zone:  
-			//"trip = (trip - vec3(0.2, 0.0, 0.2)) * 7.0;", 
-			"trip = max(trip, 0.0);",      						
-			"trip /= (trip.x + trip.y + trip.z );",			// Force weights to sum to 1.0 (very important!)  
-			
-			//"vec2 xy = fract(xyUv/5000.0);",
-			"vec2 xz = vec2(xzUv.x + time*300.0, xzUv.y);",
-			"xz = fract(xz/5000.0);",
-			//"	xz = fract(xz);",
-			//"vec2 yz = fract(yzUv/5000.0);",
-			//"	gl_FragColor = texture2D(wave, xz) * wvLightFront * vec4(2.8,2.8,2.8,1);",
-			//"	gl_FragColor = vec4(gl_FragColor.r, gl_FragColor.g, gl_FragColor.b, 1.0);",
-			"gl_FragColor = (trip.y * texture2D(wave, xz)) * wvLightFront * vec4(2.8,2.8,2.8,1);",
-			// "gl_FragColor = (trip.x * texture2D(wave, yz))",		//dead 3planar mapping
-			// "		+ (trip.y * texture2D(wave, xz));",
-			// "		+ (trip.z * texture2D(wave, xy));",
-			"}"	
-		].join("\n")
-	}));
-
-	scene.add(waterMesh);
-}
-
 function animate() {
 
 	requestAnimationFrame(animate);
@@ -303,36 +157,12 @@ function animate() {
 	
 }
 
-function waveDisplacement() {
-
-	var amp = 500;
-	var t = waterUniforms.time.value;
-	//var t = clock.elapsedTime;	
-	
-	// for( var i =0; i < waterGeometry.vertices.length; ++i) {
-		// var vert = waterGeometry.vertices[i];
-		// waterGeometry.vertices[i].y = amp * Math.sin(vert.x * 0.0002  - t);
-		// waterGeometry.vertices[i].y += amp * Math.sin(vert.z * 0.0002  - t);
-	// }
-	
-	// waterGeometry.computeFaceNormals();
-	// waterGeometry.computeVertexNormals();	
-	// waterGeometry.verticesNeedUpdate = true;
-	// waterGeometry.normalsNeedUpdate = true;
-	if( boat ) {	
-		boat.position.y = waterUniforms.amplitude.value * 
-			( Math.sin( boat.position.x * waterUniforms.frequency.value - t ) + Math.sin( boat.position.z * waterUniforms.frequency.value - t ) );
-		// boat.position.y = amp * Math.sin(boat.position.x * waterUniforms.frequency - t);
-		// boat.position.y = amp * Math.sin(boat.position.x * waterUniforms.frequency - t);
-	}
-}
-
 function render() {
 	var delta = clock.getDelta();
-	skyboxCamera.setRotationFromQuaternion(camera.quaternion);	//three.67
-	renderer.render(skyboxScene, skyboxCamera, null, true);
-	controls.update(delta);
-	waveDisplacement();
-	renderer.render(scene, camera);
-	waterUniforms.time.value += 0.8 * delta;
+	controls.update( delta );	
+	
+	ocean.animate( delta );
+	skybox.render();	
+	renderer.render(scene, camera, null, false);
+	
 }
