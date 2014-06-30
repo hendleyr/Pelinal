@@ -1,10 +1,34 @@
 var PELINAL = { VERSION: 1.0 };
 
-PELINAL.SkyBox = function ( renderer, camera, texturePath ) {
+PELINAL.SkyBox = function ( renderer, camera, texturePath, floorTexturePath ) {
 	
 	this._renderer = renderer;
 	this._scene = new THREE.Scene();
 	this._camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 3 );
+	this._camera.position.y = 0.1;
+	
+	if ( floorTexturePath ) {
+		this._floorGeometry = new THREE.PlaneGeometry(6, 6);
+		this._floorGeometry.applyMatrix( new THREE.Matrix4().makeRotationX( -Math.PI / 2 ) );
+		this._floorGeometry.elementsNeedUpdate = true;
+		this._floorGeometry.verticesNeedUpdate = true;
+		
+		this._floorTexture = THREE.ImageUtils.loadTexture(floorTexturePath, THREE.UVMapping);
+		this._floorTexture.wrapS = THREE.RepeatWrapping;
+		this._floorTexture.wrapT = THREE.RepeatWrapping;
+		this._floorTexture.repeat.set( 10, 10 );
+		this._floorMaterial = new THREE.MeshLambertMaterial({
+			emissive: new THREE.Color( 0x0067aa ),
+			//wireframe: true,
+			map: this._floorTexture,
+			depthTest: false,
+			depthWrite: false,
+			side: THREE.DoubleSide
+		});
+		this._floorMesh = new THREE.Mesh( this._floorGeometry, this._floorMaterial );
+		this._scene.add( this._floorMesh );
+		//this._scene.add ( new THREE.DirectionalLight( 0xffffff, 1.0 ) )
+	}
 	
 	this._geometry = new THREE.BoxGeometry( 4, 1, 4 );	// todo: custom skybox geometry
 	this._geometry.faces.splice( 4,4 );
@@ -77,7 +101,7 @@ PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath )
 		
 	}
 
-	for ( var i = 0; i < 64+1; i++ ) {
+	for ( var i = 0; i < 64; i++ ) {
 	
 		for( var j = 0; j < 64-1; j++ ) {
 		
@@ -101,7 +125,7 @@ PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath )
 	
 	//TEXTURE
 	this._texture = THREE.ImageUtils.loadTexture( texturePath );
-	this._texture.premultiplyAlpha = false;		// may require tweaking
+	this._texture.premultiplyAlpha = true;		// may require tweaking
 	this._texture.wrapS = THREE.RepeatWrapping;
 	this._texture.wrapT = THREE.RepeatWrapping;
 	this._texture.offset = 1.0;
@@ -109,66 +133,41 @@ PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath )
 	this._texture.magFilter = THREE.NearestFilter;
 	
 	//UNIFORMS
+	this._rephase = new THREE.Vector2( camera.position.x, camera.position.z );
 	this._amplitude = amplitude;
 	this._frequency = frequency;
-	this._uniforms = {
+	this._uniforms = THREE.UniformsUtils.merge( [ THREE.UniformsLib.lights, {
+		rephase: { type: "v2", value: this._rephase },
 		amplitude: { type: "f", value: this._amplitude },
 		frequency: { type: "f", value: this._frequency },
 		time: { type: "f", value: 1.0 },
-		wave: { type: "t", value: this._texture }
-	 };
+		diffuse: { type: "c", value: new THREE.Color( 0x0067aa ) },
+		opacity: { type: "f", value: 1.0 },
+		ambient: { type: "c", value: new THREE.Color( 0x0067aa ) },
+		emissive: { type: "c", value: new THREE.Color( 0x000000 ) },
+		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
+		shininess: { type: "f", value: 5 },
+	 } ] );
+	this._uniforms.map = { type: "t", value: this._texture };	//workaround for texture id lost in uniforms merge
 	 
-	 //MATERIAL
-	 this._material = new THREE.ShaderMaterial({
+	//MATERIAL
+	this._material = new THREE.ShaderMaterial({
+		//transparent: true,
+		//blending: THREE.SubtractiveBlending,
+		//blendEquation: THREE.AddEquation,
+		//blendSrc: THREE.SrcAlphaFactor,
+		//blendDst: THREE.OneMinusSrcAlphaFactor,
+		skinning: false,
+		morphTargets: false,
+		morphNormals: false,
+		fog: false,
+		lights: true,
 		uniforms: this._uniforms,
-		shading: THREE.SmoothShading, // todo
-		depthTest: true,
-		depthWrite: true,
-		vertexShader:
-			[ 	"uniform float amplitude;",
-				"uniform float frequency;",
-				"uniform float time;",
-				"uniform sampler2D wave;",
-				//"varying vec3 vColor;",
-				"varying vec4 wvLightFront;",
-				"varying vec3 triplaneNormal;",
-				"varying vec2 xzUv;",
-
-				"void main() {",
-				"vec3 lightVector = normalize( vec3( 0.8, .3, 0.0 ) );",
-				"vec4 lightColor = vec4( 0.0,0.2,0.5,1.0 );",
-				//triplanar mapping
-				"xzUv = vec2(position.x, position.z);",
-								
-				"wvLightFront = vec4(1,1,1,1);",
-				"vec4 mvPosition = vec4(position, 1.0);",
-				"mvPosition.y = amplitude * ( sin( position.x * frequency - time ) + sin( position.z * frequency - time ) );",
-				"triplaneNormal = (cross( vec3(1, amplitude * frequency * cos(time - frequency * mvPosition.x), 0),",
-				"							vec3(0, amplitude * frequency * cos(time - frequency * mvPosition.z), 1)));",
-				"triplaneNormal = normalize(triplaneNormal);",
-				"wvLightFront = -dot( lightVector, normalize(triplaneNormal )) * lightColor;",	// * 
-				"mvPosition = modelViewMatrix * mvPosition;",
-				"gl_Position = projectionMatrix * mvPosition;",
-				"}"
-			].join("\n"),
-		fragmentShader: 
-			[	"uniform float time;",
-				"uniform sampler2D wave;",
-				"varying vec4 wvLightFront;",
-				"varying vec3 triplaneNormal;",
-				"varying vec2 xzUv;",
-				
-				"void main() {",
-				//"	gl_FragColor =  wvLightFront;",		//simple shading				
-				
-				"vec2 xz = vec2(xzUv.x + time*300.0, xzUv.y);",
-				"xz = fract(xz/5000.0);",
-								"gl_FragColor = ( texture2D( wave, xz ) ) * wvLightFront * vec4(2.8,2.8,2.8,1);",
-				// "gl_FragColor = (trip.x * texture2D(wave, yz))",		//dead 3planar mapping
-				// "		+ (trip.y * texture2D(wave, xz));",
-				// "		+ (trip.z * texture2D(wave, xy));",
-				"}"	
-			].join("\n")
+		//shading: THREE.SmoothShading, // todo
+		//depthTest: true,
+		//depthWrite: true,
+		vertexShader: PELINAL.ShaderLib.Ocean.vertexShader,
+		fragmentShader: PELINAL.ShaderLib.Ocean.fragmentShader
 	 });
 	
 	//MESH
@@ -212,7 +211,7 @@ PELINAL.Ocean.prototype = {
 		this.floatingObjects.forEach( function ( object3d ) {
 			if ( object3d instanceof THREE.Camera ) {
 			
-				object3d.position.y = 80 + this._amplitude * 
+				object3d.position.y = 160 + this._amplitude * 
 					( Math.sin( object3d.position.x * this._frequency - this._uniforms.time.value ) 
 					+ Math.sin( object3d.position.z * this._frequency - this._uniforms.time.value ) );
 					
@@ -225,6 +224,14 @@ PELINAL.Ocean.prototype = {
 					
 			}
 		}, this );
+		
+	},
+	
+	scroll: function ( position ) {
+		
+		this._uniforms.rephase.value = new THREE.Vector2( position.x, position.z );
+		this._mesh.position.x = position.x;
+		this._mesh.position.z = position.z;
 		
 	}
 

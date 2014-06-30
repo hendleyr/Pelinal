@@ -10,7 +10,7 @@ var camera, controls, scene, renderer;
 var mesh, texture;
 var boat;
 var skybox, ocean;
-var directionalLight;
+var directionalLight, sunHelper, sun;
 
 var worldWidth = 256, worldDepth = 256,
 worldHalfWidth = worldWidth / 2, worldHalfDepth = worldDepth / 2;
@@ -64,12 +64,22 @@ function init() {
 		geometry.vertices[i].y = data[i] * 10;
 
 	}
-	//var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
-	//scene.add( ambientLight );
+	// var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
+	// scene.add( ambientLight );
 	
-	directionalLight = new THREE.DirectionalLight(0xffffff, 1.00);	
-	directionalLight.position = new THREE.Vector3(0.8, 0.3, 0).normalize();
-	scene.add(directionalLight);
+	directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
+	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
+	sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );
+	
+	scene.add( directionalLight );
+	//scene.add( sunHelper );
+	
+	var sunGeometry = new THREE.SphereGeometry( 250 );
+	//sunGeometry.position = directionalLight.position;
+	sun = new THREE.Mesh(sunGeometry, new THREE.MeshBasicMaterial() );
+	sun.position = directionalLight.position;	
+	scene.add( sun );
+	
 
 	texture = THREE.ImageUtils.loadTexture("textures/sand.png");
 	texture.wrapS = THREE.RepeatWrapping;
@@ -78,10 +88,10 @@ function init() {
 	texture.needsUpdate = true;
 
 	mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture, wrapAround: true, wrapRPG: 0xFF0000 }));
-	//scene.add(mesh);
+	// scene.add(mesh);
 
 	//SKYBOX and WATER
-	skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png" );
+	skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png", "textures/water1024.png" );
 	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
@@ -92,6 +102,7 @@ function init() {
 		console.log( item, loaded, total );
 
 	};
+	
 	var loader = new THREE.OBJLoader( manager );
 	loader.load( 'models/boat.obj', function ( object ) {
 		boat = object;
@@ -106,7 +117,7 @@ function init() {
 	} );
 
 	window.addEventListener('resize', onWindowResize, false);
-
+	ocean.floatObject( camera );
 }
 
 function onWindowResize() {
@@ -161,8 +172,9 @@ function render() {
 	var delta = clock.getDelta();
 	controls.update( delta );	
 	
+	ocean.scroll( camera.position );
 	ocean.animate( delta );
-	skybox.render();	
+	skybox.render();
 	renderer.render(scene, camera, null, false);
 	
 }
