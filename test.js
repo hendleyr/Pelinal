@@ -1,7 +1,7 @@
 if (!Detector.webgl) {
 
 	Detector.addGetWebGLMessage();
-	document.getElementById('container').innerHTML = "";
+	document.getElementById( 'container' ).innerHTML = "";
 
 }
 
@@ -12,60 +12,44 @@ var boat;
 var skybox, ocean;
 var directionalLight, sunHelper, sun;
 
-var worldWidth = 256, worldDepth = 256,
-worldHalfWidth = worldWidth / 2, worldHalfDepth = worldDepth / 2;
-
-var clock = new THREE.Clock(true);
+var clock = new THREE.Clock( true );
+var animation, toonMesh;
+var menu;
 
 init();
 animate();
 
 function init() {
 
-	container = document.getElementById('container');
+	//container = document.getElementById( 'container' );
 	renderer = new THREE.WebGLRenderer();
-	renderer.setClearColor(0xbfd1e5);
-	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.setClearColor( 0xbfd1e5 );
+	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.autoClear = false;
-	container.innerHTML = "";
-	container.appendChild(renderer.domElement);
+	//container.innerHTML = "";
+	document.body.appendChild( renderer.domElement );
 
 	stats = new Stats();
 	stats.domElement.style.position = 'absolute';
 	stats.domElement.style.top = '0px';
-	container.appendChild(stats.domElement);
+	document.body.appendChild( stats.domElement );
 
-	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 39690);
+	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 39690 );
 
 	scene = new THREE.Scene();
 
-	controls = new THREE.FirstPersonControls(camera);
-	controls.movementSpeed = 1000;
-	controls.lookSpeed = 0.1;
+	//controls = new THREE.FirstPersonControls( camera );
+	//controls.movementSpeed = 1000;
+	//controls.lookSpeed = 0.1;
+	
+	controls = new PELINAL.FirstPersonControls( camera );
+	
+	menu = new PELINAL.Menu( 'blocker', 'instructions', controls );
 
-	data = generateHeight(worldWidth, worldDepth);
+	camera.position.y = 500;
 
-	camera.position.y = data[worldHalfWidth + worldHalfDepth * worldWidth] + 500;
-
-	var geometry = new THREE.PlaneGeometry(15000, 15000, worldWidth - 1, worldDepth - 1);
-	geometry.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
-
-	for (var i = 0, l = geometry.vertices.length; i < l; i++) {
-
-		geometry.vertices[i].y = data[i] * 10;
-
-	}
-	//compute normals
-	geometry.computeFaceNormals();
-	geometry.computeVertexNormals();
-
-	for (var i = 0, l = geometry.vertices.length; i < l; i++) {
-
-		geometry.vertices[i].y = data[i] * 10;
-
-	}
-	// var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
-	// scene.add( ambientLight );
+	var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
+	scene.add( ambientLight );
 	
 	directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
 	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
@@ -80,15 +64,11 @@ function init() {
 	sun.position = directionalLight.position;	
 	scene.add( sun );
 	
-
 	texture = THREE.ImageUtils.loadTexture("textures/sand.png");
 	texture.wrapS = THREE.RepeatWrapping;
 	texture.wrapT = THREE.RepeatWrapping;
 	texture.repeat.set(16, 16);
 	texture.needsUpdate = true;
-
-	mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture, wrapAround: true, wrapRPG: 0xFF0000 }));
-	// scene.add(mesh);
 
 	//SKYBOX and WATER
 	skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png", "textures/water1024.png" );
@@ -114,10 +94,35 @@ function init() {
 		scene.add( object );
 		ocean.floatObject( boat );
 
-	} );
+	});
 
 	window.addEventListener('resize', onWindowResize, false);
-	ocean.floatObject( camera );
+	// ocean.floatObject( camera );
+	
+	
+	//
+	var testLoader = new THREE.JSONLoader();
+	
+	testLoader.load('models/toon/toon.js', function ( geometry, materials ) {
+		var material;
+		toonMesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
+		
+		toonMesh.position.set( 800, 560, 1400 );
+		
+		material = toonMesh.material.materials;
+		
+		for ( var i = 0; i < materials.length; ++i ) {
+			var mat = materials[i];
+			mat.skinning = true;
+		}
+		
+		scene.add( toonMesh );
+		THREE.AnimationHandler.add( toonMesh.geometry.animations[0] );
+		animation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.LINEAR );
+		
+		animation.play();
+	});
+	//
 }
 
 function onWindowResize() {
@@ -163,12 +168,20 @@ function generateHeight(width, height) {
 function animate() {
 
 	requestAnimationFrame(animate);
+	if ( animation ) {
+		THREE.AnimationHandler.update( .4 );
+		//just for fun...
+		//toonMesh.position.y = boat.position.y + 480;
+		//toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
+	}
+	
 	render();
 	stats.update();
 	
 }
 
 function render() {
+
 	var delta = clock.getDelta();
 	controls.update( delta );	
 	
