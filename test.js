@@ -22,8 +22,9 @@ animate();
 function init() {
 
 	//container = document.getElementById( 'container' );
-	renderer = new THREE.WebGLRenderer();
-	renderer.setClearColor( 0xbfd1e5 );
+	renderer = new THREE.WebGLRenderer( { clearAlpha: 1 } );
+	//renderer.setClearColor( 0x42b2da );
+	renderer.setClearColor( 0x18406b );
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.autoClear = false;
 	//container.innerHTML = "";
@@ -34,19 +35,13 @@ function init() {
 	stats.domElement.style.top = '0px';
 	document.body.appendChild( stats.domElement );
 
-	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 39690 );
+	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 33690 );
+	camera.position.y =	2250;
 
 	scene = new THREE.Scene();
 
-	//controls = new THREE.FirstPersonControls( camera );
-	//controls.movementSpeed = 1000;
-	//controls.lookSpeed = 0.1;
-	
-	controls = new PELINAL.FirstPersonControls( camera );
-	
+	controls = new PELINAL.FirstPersonControls( camera );	
 	menu = new PELINAL.Menu( 'blocker', 'instructions', controls );
-
-	camera.position.y = 500;
 
 	var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
 	scene.add( ambientLight );
@@ -71,7 +66,8 @@ function init() {
 	texture.needsUpdate = true;
 
 	//SKYBOX and WATER
-	skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png", "textures/water1024.png" );
+	//skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png", "textures/water1024.png" );
+	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 2000);
 	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
@@ -118,7 +114,7 @@ function init() {
 		
 		scene.add( toonMesh );
 		THREE.AnimationHandler.add( toonMesh.geometry.animations[0] );
-		animation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.LINEAR );
+		animation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
 		
 		animation.play();
 	});
@@ -171,8 +167,8 @@ function animate() {
 	if ( animation ) {
 		THREE.AnimationHandler.update( .4 );
 		//just for fun...
-		//toonMesh.position.y = boat.position.y + 480;
-		//toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
+		toonMesh.position.y = boat.position.y + 480;
+		toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
 	}
 	
 	render();
@@ -187,6 +183,7 @@ function render() {
 	
 	ocean.scroll( camera.position );
 	ocean.animate( delta );
+	skybox.animate( delta );
 	skybox.render();
 	renderer.render(scene, camera, null, false);
 	

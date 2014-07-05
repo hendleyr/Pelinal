@@ -76,6 +76,7 @@ PELINAL.Menu.prototype = {
 
 }
 
+
 PELINAL.FirstPersonControls = function ( camera ) {
 
 	camera.rotation.set( 0, 0, 0 );
@@ -96,7 +97,7 @@ PELINAL.FirstPersonControls.prototype = {
 	constructor: PELINAL.FirstPersonControls,
 	_camera: null, _velocity: null,
 	_isEnabled: false, _isMovingForward: false, _isMovingLeft: false, _isMovingBackward: false, _isMovingRight: false,
-	_friction: 10, _moveSpeed: 400,
+	_friction: 10, _moveSpeed: 6400,
 	_sensitivity: 0.002,
 	_forwardKey: 87,		// w
 	_leftKey: 65,			// a
@@ -190,61 +191,129 @@ PELINAL.FirstPersonControls.prototype = {
 }
 
 
-PELINAL.SkyBox = function ( renderer, camera, texturePath, floorTexturePath ) {
+PELINAL.SkyBox = function ( renderer, camera, cloudTexturePath, cloudParticleTexturePaths, cloudParticleDensity ) {
 
 	this._renderer = renderer;
 	this._scene = new THREE.Scene();
-	this._camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 3 );
-	this._camera.position.y = 0.1;
-
-	if ( floorTexturePath ) {
-		this._floorGeometry = new THREE.PlaneGeometry(6, 6);
-		this._floorGeometry.applyMatrix( new THREE.Matrix4().makeRotationX( -Math.PI / 2 ) );
-		this._floorGeometry.elementsNeedUpdate = true;
-		this._floorGeometry.verticesNeedUpdate = true;
-
-		this._floorTexture = THREE.ImageUtils.loadTexture(floorTexturePath, THREE.UVMapping);
-		this._floorTexture.wrapS = THREE.RepeatWrapping;
-		this._floorTexture.wrapT = THREE.RepeatWrapping;
-		this._floorTexture.repeat.set( 10, 10 );
-		this._floorMaterial = new THREE.MeshLambertMaterial({
-			emissive: new THREE.Color( 0x0067aa ),
-			//wireframe: true,
-			map: this._floorTexture,
-			depthTest: false,
-			depthWrite: false,
-			side: THREE.DoubleSide
-		});
-		this._floorMesh = new THREE.Mesh( this._floorGeometry, this._floorMaterial );
-		this._scene.add( this._floorMesh );
-		//this._scene.add ( new THREE.DirectionalLight( 0xffffff, 1.0 ) )
+	this._camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 10 );
+	this.proxyCamera = camera;	// use this camera's orientation for rendering
+	//this._scene.add ( new THREE.DirectionalLight( 0xffffff, 1.0 ) );
+	
+	// distant clouds
+	this._cloudGeometry = new THREE.Geometry();
+	var radius = 8;
+	var canter = 0;
+	var height = .9;
+	var loci = 16;
+	var uvs = [];
+	
+	for ( var i = 0; i < loci; ++i ) {
+		// leading edge
+		var angle = i * 2 * Math.PI / loci;
+		this._cloudGeometry.vertices.push( new THREE.Vector3( Math.cos( angle ) * radius, 0, Math.sin( angle ) * radius ) );
+		this._cloudGeometry.vertices.push( new THREE.Vector3( Math.cos( angle ) * radius, height, Math.sin( angle ) * radius ) );
+		// cantered edge
+		var angle = ( i - 1.5 ) * 2 * Math.PI / loci;
+		this._cloudGeometry.vertices.push( new THREE.Vector3( 
+			Math.cos( angle ) * ( radius - canter ), 
+			0, 
+			Math.sin( angle ) * ( radius - canter )
+		) );
+		this._cloudGeometry.vertices.push( new THREE.Vector3( 
+			Math.cos( angle ) * ( radius - canter ), 
+			height, 
+			Math.sin( angle ) * ( radius - canter )
+		) );
+		
+		var index = 4 * i;
+		this._cloudGeometry.faces.push( new THREE.Face3( index + 2,	index + 1,  index, new THREE.Vector3( Math.cos( angle ), 0, Math.sin( angle ) ) ) );
+		this._cloudGeometry.faces.push( new THREE.Face3( index + 3, index + 1, index + 2, new THREE.Vector3( Math.cos( angle ), 0, Math.sin( angle ) ) ) );		
+		uvs.push( [ new THREE.Vector2( 1, 0 ), new THREE.Vector2( 0, 1 ), new THREE.Vector2( 0, 0 ) ] );
+		uvs.push( [ new THREE.Vector2( 1, 1 ), new THREE.Vector2( 0, 1 ), new THREE.Vector2( 1, 0 ) ] );
 	}
-
-	this._geometry = new THREE.BoxGeometry( 4, 1, 4 );	// todo: custom skybox geometry
-	this._geometry.faces.splice( 4,4 );
-	this._geometry.applyMatrix( new THREE.Matrix4().makeTranslation( 0, 0.5, 0 ) );
-	this._geometry.elementsNeedUpdate = true;
-	this._geometry.verticesNeedUpdate = true;
-
-	this._texture = THREE.ImageUtils.loadTexture(texturePath, THREE.UVMapping);
-	this._texture.premultiplyAlpha = true;	// only for PNG
-
-	this._material = new THREE.MeshLambertMaterial({
+	this._cloudGeometry.faceVertexUvs[0] = uvs;
+	this._cloudGeometry.verticesNeedUpdate = true;
+	this._cloudGeometry.elementsNeedUpdate = true;
+	this._cloudGeometry.uvsNeedUpdate = true;	
+	
+	this._cloudTexture = THREE.ImageUtils.loadTexture( cloudTexturePath, THREE.UVMapping );
+	this._cloudMaterial = new THREE.MeshLambertMaterial({
 		shading: THREE.FlatShading,
 		transparent: true,
-		emissive: new THREE.Color( 0xffffff ),
+		blending: THREE.NormalBlending,		
+		opacity: 1.0,
+		alphaTest: 0.0,
+		emissive: new THREE.Color( 0xFFFFFF ),
 		fog: false,
-		map: this._texture,
+		map: this._cloudTexture,
 		depthTest: false,
 		depthWrite: false,
 		side: THREE.BackSide
 	});
-
-	this._mesh = new THREE.Mesh( this._geometry, this._material );
-	this._scene.add( this._mesh );
-
-	this.proxyCamera = camera;	// use this camera's orientation for rendering
-
+	
+	this._cloudMesh = new THREE.Mesh( this._cloudGeometry, this._cloudMaterial );
+	this._cloudMesh.translateY( -0.25 );
+	this._cloudMesh.scale.x = 1.25;
+	
+	this._scene.add( this._cloudMesh );
+	
+	// free cloud particles
+	this._cloudParticles = new THREE.Geometry();
+	this._cloudParticleTextures = [];
+	this._cloudParticleMaterials = [];
+	this._cloudParticleSystems = [];	
+	
+	for ( var i = 0; i < cloudParticleTexturePaths.length; ++i ) {
+	
+		var texture = THREE.ImageUtils.loadTexture( cloudParticleTexturePaths[i], THREE.UVMapping );;
+		this._cloudParticleTextures.push( texture );
+		this._cloudParticleMaterials[i] = new THREE.ParticleSystemMaterial({ 
+			size: 1, 
+			opacity: 1.0,
+			alphaTest: 0.3,
+			map: this._cloudParticleTextures[i], 
+			blending: THREE.NormalBlending, 			
+			depthTest: false, 
+			transparent : true,
+			sizeAttenuation: true
+		});
+		
+	}
+		
+	for ( var i = 0; i < cloudParticleDensity; ++i ) {
+		//todo: i dont like billboards / rotating particle systems. just make quads
+		radius = Math.random() * 2 + 5;	// [ 7, 9 ]
+		var radSqr = Math.pow( radius, 2 );
+	
+		var vertex = new THREE.Vector3();
+		
+		vertex.x = Math.random() * radius * 2 - radius;		// [ -radius, radius ]
+		var xSqr = Math.pow( vertex.x, 2 );
+				
+		vertex.y = Math.random() * 2 * ( radSqr - xSqr ) - ( radSqr - xSqr );	// [ -( r^2 - x^2 ), r^2 - x^2 ]
+		ySqr = Math.pow( vertex.y, 2 );
+		
+		vertex.z = ( Math.random() * 2 - 1 ) * 2 * Math.sqrt( radSqr - xSqr - ySqr );
+				
+		this._cloudParticles.vertices.push( vertex );
+	
+	}
+	
+	for ( var i = 0; i < this._cloudParticleMaterials.length; ++i ) {
+	
+		var system = new THREE.ParticleSystem( this._cloudParticles, this._cloudParticleMaterials[i] );
+		system.sortParticles = true;
+		
+		system.rotation.z = Math.random() * 6;
+		system.rotation.x = Math.random() * 6;
+		// system.rotation.y = Math.random() * 6;
+		
+		system.scale.set( 1, .5, 1 );
+		this._cloudParticleSystems.push( system );
+		this._scene.add( this._cloudParticleSystems[i] );
+	
+	}
+	
 };
 
 PELINAL.SkyBox.prototype = {
@@ -255,6 +324,17 @@ PELINAL.SkyBox.prototype = {
 
 	proxyCamera: null,
 
+	animate: function ( delta ) {
+		
+		for ( var i = 0; i < this._cloudParticleSystems.length; ++i ) {
+		
+			this._cloudParticleSystems[i].rotation.z += delta * .005;
+			this._cloudParticleSystems[i].rotation.x += delta * .005;
+		
+		}
+		
+	},
+	
 	render: function () {
 
 		// render scene to default render target (null) with proxy camera and clear color buffer (should always be rendered first)
@@ -264,6 +344,7 @@ PELINAL.SkyBox.prototype = {
 	}
 
 };
+
 
 PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath ) {
 
@@ -386,8 +467,8 @@ PELINAL.Ocean.InjectDependencies = function () {
 			
 			for ( var i = 0; i < length; ++i ) {
 			
-				payload.objects[i].y = 10 + payload.amplitude * Math.sin( payload.objects[i].x * payload.frequency - payload.time ) + Math.sin( payload.objects[i].z * payload.frequency - payload.time );
-			
+				payload.objects[i].y = 10 + payload.amplitude * ( Math.sin( payload.objects[i].x * payload.frequency - payload.time ) + Math.sin( payload.objects[i].z * payload.frequency - payload.time ) );
+				
 			}
 		
 			postMessage( payload );	// todo: may need to tie guids to these positions
@@ -454,7 +535,15 @@ PELINAL.Ocean.prototype = {
 		};	
 		for( var i = 0; i < this.floatingObjects.length; ++i ) {
 		
-			payload.objects.push( this.floatingObjects[i].position );
+			if ( !this.floatingObjects[i] instanceof THREE.Camera ) { 
+				payload.objects.push( this.floatingObjects[i].position );
+			}
+			else { 
+				var cam = this.floatingObjects[i];	// calc cam in main thread, any waits are too jarring
+				cam.position.y = 300 + payload.amplitude * ( Math.sin( cam.position.x * payload.frequency - payload.time ) + Math.sin( cam.position.z * payload.frequency - payload.time ) );
+			
+			}
+			
 		
 		}
 		this._animateWorker.postMessage( JSON.stringify( payload ) );
@@ -466,7 +555,7 @@ PELINAL.Ocean.prototype = {
 		for( var i = 0; i < payload.data.objects.length; ++i ) {
 		
 			this.floatingObjects[i].position.y = payload.data.objects[i].y;
-		
+					
 		}
 	
 	},
