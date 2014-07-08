@@ -191,13 +191,21 @@ PELINAL.FirstPersonControls.prototype = {
 }
 
 
-PELINAL.SkyBox = function ( renderer, camera, cloudTexturePath, cloudParticleTexturePaths, cloudParticleDensity ) {
+PELINAL.SkyBox = function ( renderer, camera, cloudTexturePath, cloudParticleTexturePaths, cloudParticleDensity, scene ) {
 
 	this._renderer = renderer;
 	this._scene = new THREE.Scene();
-	this._camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 10 );
+	this._camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 20 );
 	this.proxyCamera = camera;	// use this camera's orientation for rendering
-	//this._scene.add ( new THREE.DirectionalLight( 0xffffff, 1.0 ) );
+	
+	// sun
+	this._sunGeometry = new THREE.SphereGeometry( 0.25 );
+	this._sunMesh = new THREE.Mesh( this._sunGeometry, new THREE.MeshBasicMaterial({
+		depthTest: false,
+		depthWrite: false
+	}));
+	this._sunMesh.position.set( 5, 5, 0 );
+	this._scene.add( this._sunMesh );
 	
 	// distant clouds
 	this._cloudGeometry = new THREE.Geometry();
@@ -257,61 +265,47 @@ PELINAL.SkyBox = function ( renderer, camera, cloudTexturePath, cloudParticleTex
 	
 	this._scene.add( this._cloudMesh );
 	
-	// free cloud particles
-	this._cloudParticles = new THREE.Geometry();
-	this._cloudParticleTextures = [];
-	this._cloudParticleMaterials = [];
-	this._cloudParticleSystems = [];	
-	
+	// free cloud particles		
 	for ( var i = 0; i < cloudParticleTexturePaths.length; ++i ) {
 	
 		var texture = THREE.ImageUtils.loadTexture( cloudParticleTexturePaths[i], THREE.UVMapping );;
 		this._cloudParticleTextures.push( texture );
-		this._cloudParticleMaterials[i] = new THREE.ParticleSystemMaterial({ 
-			size: 1, 
-			opacity: 1.0,
-			alphaTest: 0.3,
-			map: this._cloudParticleTextures[i], 
-			blending: THREE.NormalBlending, 			
-			depthTest: false, 
-			transparent : true,
-			sizeAttenuation: true
-		});
 		
 	}
-		
+	
+	// make a bouquet of cloud quads from materials
 	for ( var i = 0; i < cloudParticleDensity; ++i ) {
-		//todo: i dont like billboards / rotating particle systems. just make quads
-		radius = Math.random() * 2 + 5;	// [ 7, 9 ]
-		var radSqr = Math.pow( radius, 2 );
 	
-		var vertex = new THREE.Vector3();
+		var group = new THREE.Object3D();
+		group.position = new THREE.Vector3( Math.random() * 20 - 10, Math.random() * 6 + 2, Math.random() * 20 - 10 );
+	
+		for ( var j = 0; j < this._cloudParticleTextures.length; ++j ) {
+			
+			var scale = Math.random() + 1;
+			var cloud = new THREE.Mesh( new THREE.PlaneGeometry( scale, scale ), new THREE.MeshLambertMaterial({
+				shading: THREE.FlatShading,
+				transparent: true,
+				blending: THREE.NormalBlending,		
+				opacity: 1.0,
+				//alphaTest: 0.3,
+				emissive: new THREE.Color( 0xFFFFFF ),
+				fog: false,
+				map: this._cloudParticleTextures[j],
+				depthTest: false,
+				depthWrite: false
+			}));
+			
+			group.add( cloud );
+			// jitter within group
+			//cloud.position.x = Math.random() * 2 - 1;
+			cloud.position.y = Math.random() * 2 - 1;
+			cloud.position.z = Math.random() * 2 - 1;
+			
+		}
 		
-		vertex.x = Math.random() * radius * 2 - radius;		// [ -radius, radius ]
-		var xSqr = Math.pow( vertex.x, 2 );
-				
-		vertex.y = Math.random() * 2 * ( radSqr - xSqr ) - ( radSqr - xSqr );	// [ -( r^2 - x^2 ), r^2 - x^2 ]
-		ySqr = Math.pow( vertex.y, 2 );
-		
-		vertex.z = ( Math.random() * 2 - 1 ) * 2 * Math.sqrt( radSqr - xSqr - ySqr );
-				
-		this._cloudParticles.vertices.push( vertex );
-	
-	}
-	
-	for ( var i = 0; i < this._cloudParticleMaterials.length; ++i ) {
-	
-		var system = new THREE.ParticleSystem( this._cloudParticles, this._cloudParticleMaterials[i] );
-		system.sortParticles = true;
-		
-		system.rotation.z = Math.random() * 6;
-		system.rotation.x = Math.random() * 6;
-		// system.rotation.y = Math.random() * 6;
-		
-		system.scale.set( 1, .5, 1 );
-		this._cloudParticleSystems.push( system );
-		this._scene.add( this._cloudParticleSystems[i] );
-	
+		group.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+		this._cloudGroupObjects.push( group );
+		this._scene.add( group );
 	}
 	
 };
@@ -321,16 +315,54 @@ PELINAL.SkyBox.prototype = {
 	constructor: PELINAL.SkyBox,
 	_renderer: null, _scene: null, _camera: null,
 	_mesh: null, _geometry: null, _material: null, _texture: null,
+	_cloudGeometry: null, _cloudTexture: null, _cloudMaterial: null,
+	_cloudGroupObjects: [], _cloudParticleTextures: [], _cloudParticleMaterials: [],
+	_timeOfDay: 0, _sunGeometry: null, _sunMesh: null,
+
+	_respawnCloud: function ( object ) {
+		
+		// reinitialize a cloud near the -x horizon	
+		object.position.x = -10;
+		object.position.y = Math.random() * 6 + 2;
+		object.position.z = Math.random() * 20 - 10;
+		
+		for ( var i = 0; i < object.children.length; ++i ) {
+		
+			object.children[i].material.opacity = 0;
+			object.children[i].scale = Math.random() + 1;
+			object.children[i].position.x = Math.random() * 2 - 1;
+			object.children[i].position.y = Math.random() * 2 - 1;
+			object.children[i].position.z = Math.random() * 2 - 1;
+		
+		}
+	
+	},
+
 
 	proxyCamera: null,
 
 	animate: function ( delta ) {
 		
-		for ( var i = 0; i < this._cloudParticleSystems.length; ++i ) {
+		for ( var i = 0; i < this._cloudGroupObjects.length; ++i ) {
 		
-			this._cloudParticleSystems[i].rotation.z += delta * .005;
-			this._cloudParticleSystems[i].rotation.x += delta * .005;
-		
+			this._cloudGroupObjects[i].position.x += delta * .5;
+			
+			if ( this._cloudGroupObjects[i].position.x > 10 ) {
+				
+				this._respawnCloud( this._cloudGroupObjects[i] );
+				
+			}
+			
+			this._cloudGroupObjects[i].position.y = 2 + 0.5 / (1 + Math.pow( this._cloudGroupObjects[i].position.x, 2 ) );
+			this._cloudGroupObjects[i].position.z += delta * .05 * Math.cos( new THREE.Vector3( 1, 0, 0 ).angleTo( new THREE.Vector3( 0, 0, this._cloudGroupObjects[i].position.z ) ) );
+			
+			this._cloudGroupObjects[i].lookAt( new THREE.Vector3( 0, 0 , 0 ) );
+			
+			 this._cloudGroupObjects[i].children[0].material.opacity = 2 / ( Math.abs( this._cloudGroupObjects[i].position.x ) + 1 )
+			 this._cloudGroupObjects[i].children[1].material.opacity = 2 / ( Math.abs( this._cloudGroupObjects[i].position.x ) + 1 )
+			 this._cloudGroupObjects[i].children[2].material.opacity = 2 / ( Math.abs( this._cloudGroupObjects[i].position.x ) + 1 )
+			
+			
 		}
 		
 	},

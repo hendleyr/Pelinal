@@ -10,7 +10,7 @@ var camera, controls, scene, renderer;
 var mesh, texture;
 var boat;
 var skybox, ocean;
-var directionalLight, sunHelper, sun;
+var directionalLight;
 
 var clock = new THREE.Clock( true );
 var animation, toonMesh;
@@ -21,13 +21,11 @@ animate();
 
 function init() {
 
-	//container = document.getElementById( 'container' );
 	renderer = new THREE.WebGLRenderer( { clearAlpha: 1 } );
 	//renderer.setClearColor( 0x42b2da );
 	renderer.setClearColor( 0x18406b );
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.autoClear = false;
-	//container.innerHTML = "";
 	document.body.appendChild( renderer.domElement );
 
 	stats = new Stats();
@@ -48,16 +46,9 @@ function init() {
 	
 	directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
 	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
-	sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );
+	//sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );
 	
 	scene.add( directionalLight );
-	//scene.add( sunHelper );
-	
-	var sunGeometry = new THREE.SphereGeometry( 250 );
-	//sunGeometry.position = directionalLight.position;
-	sun = new THREE.Mesh(sunGeometry, new THREE.MeshBasicMaterial() );
-	sun.position = directionalLight.position;	
-	scene.add( sun );
 	
 	texture = THREE.ImageUtils.loadTexture("textures/sand.png");
 	texture.wrapS = THREE.RepeatWrapping;
@@ -66,8 +57,7 @@ function init() {
 	texture.needsUpdate = true;
 
 	//SKYBOX and WATER
-	//skybox = new PELINAL.SkyBox( renderer, camera, "textures/mountains.png", "textures/water1024.png" );
-	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 2000);
+	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 25, scene);
 	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
@@ -127,8 +117,6 @@ function onWindowResize() {
 	camera.updateProjectionMatrix();
 
 	renderer.setSize(window.innerWidth, window.innerHeight);
-
-	controls.handleResize();
 
 }
 
