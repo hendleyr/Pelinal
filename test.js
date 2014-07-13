@@ -1,3 +1,16 @@
+/*	Licensed under The MIT License http://en.wikipedia.org/wiki/MIT_License
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), 
+	to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or 
+	sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+	MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE 
+	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
+	CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.	*/
+
 if (!Detector.webgl) {
 
 	Detector.addGetWebGLMessage();
@@ -7,6 +20,7 @@ if (!Detector.webgl) {
 
 var container, stats;
 var camera, controls, scene, renderer;
+var landmass;
 var mesh, texture;
 var boat;
 var skybox, ocean;
@@ -50,10 +64,10 @@ function init() {
 	
 	scene.add( directionalLight );
 	
-	texture = THREE.ImageUtils.loadTexture("textures/sand.png");
+	texture = THREE.ImageUtils.loadTexture( "textures/sand.png" );
 	texture.wrapS = THREE.RepeatWrapping;
 	texture.wrapT = THREE.RepeatWrapping;
-	texture.repeat.set(16, 16);
+	texture.repeat.set( 16, 16 );
 	texture.needsUpdate = true;
 
 	//SKYBOX and WATER
@@ -61,6 +75,10 @@ function init() {
 	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
+	//TEST LANDMASS
+	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ) );
+	scene.add( landmass._mesh );
+	
 	//BOAT
 	var manager = new THREE.LoadingManager();
 	manager.onProgress = function ( item, loaded, total ) {
@@ -70,44 +88,45 @@ function init() {
 	};
 	
 	var loader = new THREE.OBJLoader( manager );
-	loader.load( 'models/boat.obj', function ( object ) {
-		boat = object;
-		object.traverse( function ( child ) {
+	// loader.load( 'models/boat.obj', function ( object ) {
+		// boat = object;
+		// object.traverse( function ( child ) {
 
-		} );
+		// } );
 
-		object.position.y = 80;
-		scene.add( object );
-		ocean.floatObject( boat );
+		// object.position.y = 80;
+		// scene.add( object );
+		// ocean.floatObject( boat );
 
-	});
+	// });
 
 	window.addEventListener('resize', onWindowResize, false);
 	// ocean.floatObject( camera );
 	
+	// var testLoader = new THREE.JSONLoader();
 	
-	//
-	var testLoader = new THREE.JSONLoader();
-	
-	testLoader.load('models/toon/toon.js', function ( geometry, materials ) {
-		var material;
-		toonMesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
+	// testLoader.load('models/toon/toon.js', function ( geometry, materials ) {
+		// var material;
+		// toonMesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
 		
-		toonMesh.position.set( 800, 560, 1400 );
+		// toonMesh.position.set( 800, 560, 1400 );
 		
-		material = toonMesh.material.materials;
+		// material = toonMesh.material.materials;
 		
-		for ( var i = 0; i < materials.length; ++i ) {
-			var mat = materials[i];
-			mat.skinning = true;
-		}
+		// for ( var i = 0; i < materials.length; ++i ) {
+			// var mat = materials[i];
+			// mat.skinning = true;
+		// }
 		
-		scene.add( toonMesh );
-		THREE.AnimationHandler.add( toonMesh.geometry.animations[0] );
-		animation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
+		// scene.add( toonMesh );
+		// THREE.AnimationHandler.add( toonMesh.geometry.animations[0] );
+		// THREE.AnimationHandler.add( toonMesh.geometry.animations[1] );
+		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
 		
-		animation.play();
-	});
+		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
+		
+		// animation.play();
+	// });
 	//
 }
 
@@ -120,44 +139,15 @@ function onWindowResize() {
 
 }
 
-function generateHeight(width, height) {
-
-	var size = width * height, data = new Float32Array(size),
-	perlin = new ImprovedNoise(), quality = 1, z = Math.random() * 100;
-
-	for (var i = 0; i < size; i++) {
-
-		data[i] = 0
-
-	}
-
-	for (var j = 0; j < 4; j++) {
-
-		for (var i = 0; i < size; i++) {
-
-			var x = i % width, y = ~~(i / width);
-			data[i] += Math.abs(perlin.noise(x / quality, y / quality, z) * quality * 1.75);
-
-
-		}
-
-		quality *= 5;
-
-	}
-
-	return data;
-
-}
-
 function animate() {
 
 	requestAnimationFrame(animate);
-	if ( animation ) {
-		THREE.AnimationHandler.update( .4 );
-		//just for fun...
-		toonMesh.position.y = boat.position.y + 480;
-		toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
-	}
+	// if ( animation ) {
+		// THREE.AnimationHandler.update( .4 );
+		//just for fun!
+		// toonMesh.position.y = boat.position.y + 480;
+		// toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
+	// }
 	
 	render();
 	stats.update();
