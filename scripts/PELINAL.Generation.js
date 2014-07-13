@@ -137,8 +137,8 @@ PELINAL.FortuneVoronoi.prototype = {
 PELINAL.Landmass = function ( position ) {
 
 	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
-	var _siteCount = 20; 
-	var _downShift = 1.5; var _turbulenceAmp = 800; var _turbulenceFreq = 2000;
+	var _siteCount = 10;
+	var _downShift = 1; var _turbulenceAmp = 800; var _turbulenceFreq = 2000;
 	
 	this._perlin = new PELINAL.PerlinNoise( position.x );
 	var voronoi = new Voronoi( position.x );
@@ -149,46 +149,48 @@ PELINAL.Landmass = function ( position ) {
 		sites.push( { x: Math.random() * _detail, y: Math.random() * _detail } );
 	
 	}
-	// voronoi polygonization is unnecessary?
-	// this._diagram = voronoi.compute( sites, {xl: 0, xr: 100, yt: 0, yb: 100 } );
+	
+	this._diagram = voronoi.compute( sites, {xl: 0, xr: _detail, yt: 0, yb: _detail } );
 	this._geometry = new THREE.PlaneGeometry( landmassX, _landmassZ, _detail, _detail );
 	this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
 	
 	var heights = new Array( _detail * _detail );
 	for ( var i = 0; i < heights.length; ++i ) {
 	
-		var indexX = i % _detail;
-		var indexY = ~~ ( i / _detail );
-		var coordX =  indexX ;
-		var coordY =  indexY ;
+		var x = i % _detail;
+		var y = ~~ ( i / _detail );
 		
 		// calculate voronoi height contribution
-		var c1Distance = Math.pow( coordX - sites[0].x, 2 ) + Math.pow( coordY - sites[0].y, 2 );
-		var c2Distance = Math.pow( coordX - sites[0].x, 2 ) + Math.pow( coordY - sites[0].y, 2 );
+		var c1Distance = Math.pow( x - sites[0].x, 2 ) + Math.pow( y - sites[0].y, 2 );
+		var c2Distance = Math.pow( x - sites[1].x, 2 ) + Math.pow( y - sites[1].y, 2 );
+		
 		for ( var j = 0; j < sites.length; ++j ) {
 			
-			var testDistance = this._quickDistance( coordX, coordY, sites[j] );						
+			var testDistance = this._quickDistance( x, y, sites[j] );						
 			if ( testDistance < c1Distance ) {
 				c2Distance = c1Distance;
 				c1Distance = testDistance;
 			}
+			else if ( testDistance < c2Distance && testDistance > c1Distance ) {
+				c2Distance = testDistance;
+			}
 		
 		}
-		var h = ( ( c2Distance - c1Distance ) / _downShift );
-		heights[i] = h;
+		
+		heights[i] = ( c2Distance - c1Distance ) / _downShift;
 	}
 	
 	var vertices = this._geometry.vertices.length;
 	for ( var k = 0; k < vertices; ++k ) {	
 		this._geometry.vertices[k].y = heights[k];
-		this._geometry.vertices[k].y+= 200 * this._perlin.perlin2( this._geometry.vertices[k].x / 2000, this._geometry.vertices[k].z / 2000 );
-		// this._geometry.vertices[k].y+= 100 * this._perlin.perlin2( this._geometry.vertices[k].x / 100, this._geometry.vertices[k].z / 100 );
+		this._geometry.vertices[k].y+= 2000 * this._perlin.perlin2( this._geometry.vertices[k].x / 8000, this._geometry.vertices[k].z / 8000 );
+		this._geometry.vertices[k].y+= 100 * this._perlin.perlin2( this._geometry.vertices[k].x / 100, this._geometry.vertices[k].z / 100 );
 		this._geometry.vertices[k].y+= 20 * this._perlin.perlin2( this._geometry.vertices[k].x / 20, this._geometry.vertices[k].z / 20 );
 		
 		// funky test: clamp heights to regular intervals
 		// this._geometry.vertices[k].y = ~~ ( this._geometry.vertices[k].y  / 400 ) * 400;
 		
-		// perturb straight lines		
+		// perturb straight lines
 		this._geometry.vertices[k].x +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		this._geometry.vertices[k].z +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		
