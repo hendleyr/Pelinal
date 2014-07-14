@@ -72,7 +72,7 @@ function init() {
 
 	//SKYBOX and WATER
 	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 25, scene);
-	ocean = new PELINAL.Ocean( renderer, camera, 500, 0.0002, "textures/water1024.png" );
+	ocean = new PELINAL.Ocean( renderer, camera, 50, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
 	//TEST LANDMASS

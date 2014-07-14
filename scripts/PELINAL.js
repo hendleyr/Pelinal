@@ -110,7 +110,7 @@ PELINAL.FirstPersonControls.prototype = {
 	constructor: PELINAL.FirstPersonControls,
 	_camera: null, _velocity: null,
 	_isEnabled: false, _isMovingForward: false, _isMovingLeft: false, _isMovingBackward: false, _isMovingRight: false,
-	_friction: 10, _moveSpeed: 6400,
+	_friction: 10, _moveSpeed: 6400 * 4,
 	_sensitivity: 0.002,
 	_forwardKey: 87,		// w
 	_leftKey: 65,			// a

@@ -11,7 +11,7 @@
 	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 	CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.	*/
 
-PELINAL.PerlinNoise = function ( seedValue ) {
+PELINAL.PerlinGenerator = function ( seedValue ) {
 	// Perlin noise based on Stefan Gustavson's implementation
 	this._perm = new Array( 512 );
 	this._gradP = new Array( 512 );
@@ -20,9 +20,9 @@ PELINAL.PerlinNoise = function ( seedValue ) {
 	
 };
 
-PELINAL.PerlinNoise.prototype = {
+PELINAL.PerlinGenerator.prototype = {
 	// Perlin noise based on Stefan Gustavson's implementation
-	constructor: PELINAL.PerlinNoise,
+	constructor: PELINAL.PerlinGenerator,
 	
 	// cube and midpoints gradients
 	_grad3 : [	{ x: 1, y: 1, z: 0 }, { x: -1, y: 1, z: 0 }, { x: 1, y: -1, z: 0 }, { x: -1, y: -1, z: 0 },
@@ -119,6 +119,7 @@ PELINAL.PerlinNoise.prototype = {
 
 };
 
+
 PELINAL.FortuneVoronoi = function ( sites, xLeft, xRight, yTop, yBottom ) {
 
 	this._voronoi = new Voronoi();
@@ -135,62 +136,39 @@ PELINAL.FortuneVoronoi.prototype = {
 
 
 PELINAL.Landmass = function ( position ) {
-
+	// ad hoc tweakabe settings
 	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
 	var _siteCount = 10;
-	var _downShift = 1; var _turbulenceAmp = 800; var _turbulenceFreq = 2000;
+	var _perlinFrequencies = [ 2, 4, 8 ];
+	var _stepArity = 5;
+	var _turbulenceAmp = 800; var _turbulenceFreq = 2000;
 	
-	this._perlin = new PELINAL.PerlinNoise( position.x );
-	var voronoi = new Voronoi( position.x );
-		
-	var sites = [];
-	for ( var i = 0; i < _siteCount; ++i ) {
+	this._perlin = new PELINAL.PerlinGenerator( position.x );
 	
-		sites.push( { x: Math.random() * _detail, y: Math.random() * _detail } );
-	
-	}
-	
-	this._diagram = voronoi.compute( sites, {xl: 0, xr: _detail, yt: 0, yb: _detail } );
-	this._geometry = new THREE.PlaneGeometry( landmassX, _landmassZ, _detail, _detail );
+	// this._geometry = new THREE.SphereGeometry( landmassX, _detail, _detail, 0, Math.PI * 2, 0, Math.PI / 2 );
+	this._geometry = new THREE.PlaneGeometry( landmassX, _landmassZ, _detail - 1, _detail - 1 );	
 	this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
 	
-	var heights = new Array( _detail * _detail );
-	for ( var i = 0; i < heights.length; ++i ) {
+	var voronoiHeightMap = this._generateVoronoi( _detail, _siteCount );
+	var perlinHeightMap = this._generatePerlin( _detail, _perlinFrequencies );
 	
-		var x = i % _detail;
-		var y = ~~ ( i / _detail );
-		
-		// calculate voronoi height contribution
-		var c1Distance = Math.pow( x - sites[0].x, 2 ) + Math.pow( y - sites[0].y, 2 );
-		var c2Distance = Math.pow( x - sites[1].x, 2 ) + Math.pow( y - sites[1].y, 2 );
-		
-		for ( var j = 0; j < sites.length; ++j ) {
-			
-			var testDistance = this._quickDistance( x, y, sites[j] );						
-			if ( testDistance < c1Distance ) {
-				c2Distance = c1Distance;
-				c1Distance = testDistance;
-			}
-			else if ( testDistance < c2Distance && testDistance > c1Distance ) {
-				c2Distance = testDistance;
-			}
-		
-		}
-		
-		heights[i] = ( c2Distance - c1Distance ) / _downShift;
+	// combine heightmaps
+	var combinedHeightMap = new Float32Array( _detail * _detail );
+	for ( var i = 0; i < combinedHeightMap.length; ++i ) {	// todo: heuristic for combining voronoi and perlin?
+		combinedHeightMap[i] = ( voronoiHeightMap[i] * 4 / 5) + ( perlinHeightMap[i] * 1 / 5 );
+		// combinedHeightMap[i] = ( voronoiHeightMap[i] * 2 / 3 ) + ( perlinHeightMap[i] * 1 / 3 );
 	}
+	this._normalizeHeightMap( combinedHeightMap );
+	//todo: erosion
+	this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
+	this._tuckHeightMap( combinedHeightMap, _detail, 60 );
+	// this._convoluteHeightMap( combinedHeightMap, _detail, 0.25 ); //todo: my convolution filter sucks	
 	
 	var vertices = this._geometry.vertices.length;
-	for ( var k = 0; k < vertices; ++k ) {	
-		this._geometry.vertices[k].y = heights[k];
-		this._geometry.vertices[k].y+= 2000 * this._perlin.perlin2( this._geometry.vertices[k].x / 8000, this._geometry.vertices[k].z / 8000 );
-		this._geometry.vertices[k].y+= 100 * this._perlin.perlin2( this._geometry.vertices[k].x / 100, this._geometry.vertices[k].z / 100 );
-		this._geometry.vertices[k].y+= 20 * this._perlin.perlin2( this._geometry.vertices[k].x / 20, this._geometry.vertices[k].z / 20 );
+	for ( var k = 0; k < vertices; ++k ) {
+		this._geometry.vertices[k].y = 10000 * combinedHeightMap[k];
 		
-		// funky test: clamp heights to regular intervals
-		// this._geometry.vertices[k].y = ~~ ( this._geometry.vertices[k].y  / 400 ) * 400;
-		
-		// perturb straight lines
+		// perturb straight lines. somewhat artificial
 		this._geometry.vertices[k].x +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		this._geometry.vertices[k].z +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		
@@ -198,8 +176,8 @@ PELINAL.Landmass = function ( position ) {
 	this._geometry.computeFaceNormals();
 	this._geometry.computeVertexNormals();
 	this._mesh = new THREE.Mesh( this._geometry, new THREE.MeshLambertMaterial({ 
-		color: new THREE.Color( 0xccffaa )
-		//wireframe: true
+		color: new THREE.Color( 0xccffaa ),
+		// wireframe: true
 	 }));
 	
 }
@@ -210,10 +188,175 @@ PELINAL.Landmass.prototype = {
 	_perlin: null, _diagram: null,
 	_mesh: null, _geometry: null, position: null,
 	
-	_quickDistance: function ( x, y, voronoiSite ) {
+	_quickDistance: function ( x, y, site ) {
 		
-		return Math.pow( x - voronoiSite.x, 2 ) + Math.pow( y - voronoiSite.y, 2 );
+		return Math.pow( x - site.x, 2 ) + Math.pow( y - site.y, 2 );
 		
+	},
+	
+	_normalizeHeightMap: function ( heightMap ) {
+	
+		var maxHeight = 0;
+		var rounds = heightMap.length;
+		for ( var i = 0; i < rounds; ++i ) {
+			if ( Math.abs( heightMap[i] ) > maxHeight ) { 
+				maxHeight = Math.abs( heightMap[i] ); 
+			}
+		}
+		for ( var i = 0; i < rounds; ++i ) {
+			heightMap[i] /= maxHeight;
+		}
+	
+	},	
+	
+	_stepWiseClampHeightMap: function ( heightMap, stepArity ) {
+		//todo: heuristic for deciding step heights?
+		var rounds = heightMap.length;
+		for ( var i = 0; i < rounds; ++i ) {
+		
+			heightMap[i] = ~~ ( heightMap[i] * 100 / stepArity ) * stepArity / 100;
+		
+		}
+	
+	},
+	
+	_tuckHeightMap: function ( heightMap, detail, tuckRadius ) {
+		// fades edges/corners to a base height if outside a certain radius
+		var rounds = heightMap.length;
+		var radius = detail / 2;
+		for ( var i = 0; i < rounds; ++i ) {
+		
+			var x = i % detail - radius;
+			var y = ~~ ( i / detail ) - radius;
+			var d = Math.sqrt( Math.pow( x, 2 ) + Math.pow( y, 2 ) );
+			
+			if ( d > tuckRadius ) {
+			
+				// var newHeight = ( heightMap[i] * Math.max( 0, ( radius - d ) ) / radius ) - 0.1 * ( d - tuckRadius ) / radius;
+				heightMap[i] = ( heightMap[i] * Math.max( 0, ( radius - d ) ) / radius );
+				heightMap[i] -= 0.1 * ( d - tuckRadius ) / tuckRadius ;
+					
+			}
+			else {
+				
+				heightMap[i] -= 0.1 * ( d - tuckRadius ) / tuckRadius ;
+				
+			}
+		
+		}
+	
+	},
+	
+	_convoluteHeightMap: function ( heightMap, detail, strength ) {
+		
+		// for each point in heightMap, displace it along x and y by some value from a continuous function ( let's try perlin )
+		var rounds = heightMap.length;
+		for ( var i = 0; i < rounds; ++i ) {
+		
+			var x = i % detail;
+			var y = ~~ ( i / detail );
+			var delta = strength * this._perlin.perlin2( x - 0.5, y - 0.5 );
+			var dx = ( x + delta );// * detail;
+			var dy = ( y + delta );// * detail;
+			
+			var xMin = ~~ dx;
+			var xMax = xMin + 1;
+			var xFrac = dx - xMin;
+			
+			var yMin = ~~ dy;
+			var yMax = yMin + 1;
+			var yFrac = dy - yMin;
+			
+			var lowMix =  ( 1 - xFrac ) * heightMap[ ( xMin & 127 ) + ( yMin & 127 ) * detail ] + xFrac * heightMap[ ( xMax & 127 ) + ( yMin & detail ) ];
+			var highMix = ( 1 - xFrac ) * heightMap[ ( xMin & 127 ) + ( yMax & 127 ) * detail ] + xFrac * heightMap[ ( xMax & 127 ) + ( yMax & detail ) ];
+			var centroidMix = ( 1 - yFrac ) * lowMix + yFrac * highMix;
+		
+			heightMap[i] = centroidMix;
+			// ( 1 - t ) * a + t * b;
+			
+			//var mix = 0.5 * heightMap[i] + 0.5 * heightMap[target];
+		
+			// var temp = heightMap[ target ];
+			// heightMap[ target ] = heightMap[i];
+			// heightMap[i] = temp;
+			// heightMap[i] = mix;
+		
+		}
+		// return heightMap;
+		
+	},
+	
+	_generateVoronoi: function ( detail, siteCount ) {
+
+		// must generate at least two sites
+		var sites = [];
+		for ( var i = 0; i < siteCount; ++i ) {
+		
+			sites.push( { x: Math.random() * detail * 0.8 + ( 0.2 * detail ), y: Math.random() * detail * 0.8 + ( 0.2 * detail ) } );
+		
+		}
+		
+		var sampleCount = detail * detail;
+		var voronoiHeightMap = new Float32Array( sampleCount );
+		for ( var i = 0; i < sampleCount; ++i ) {
+		
+			var x = i % detail;
+			var y = ~~ ( i / detail );
+			
+			// calculate voronoi height contribution
+			var c1Distance = Math.pow( x - sites[0].x, 2 ) + Math.pow( y - sites[0].y, 2 );
+			var c2Distance = Math.pow( x - sites[1].x, 2 ) + Math.pow( y - sites[1].y, 2 );
+			
+			for ( var j = 1; j < sites.length; ++j ) {
+				// we can skip first iteration because c1 and c2 were preloaded
+				var testDistance = this._quickDistance( x, y, sites[j] );
+				if ( testDistance < c1Distance ) {
+					c2Distance = c1Distance;
+					c1Distance = testDistance;
+				}
+				else if ( testDistance < c2Distance && testDistance > c1Distance ) {
+					c2Distance = testDistance;
+				}
+			
+			}
+			
+			voronoiHeightMap[i] = ( c2Distance - c1Distance );
+			
+		}
+		
+		this._normalizeHeightMap( voronoiHeightMap );
+		return voronoiHeightMap;
+	
+	},
+	
+	_generatePerlin: function ( detail, frequencies ) {
+	
+		var sampleCount = detail * detail;
+		var perlinHeightMap = new Float32Array( sampleCount );
+		var frequencyRounds = frequencies.length;
+		
+		for ( var i = 0; i < sampleCount; ++i ) {
+		
+			var x = ( i % detail ) + 0.5;
+			var y = ~~ ( i / detail ) + 0.5;
+		
+			for ( var j = 0; j < frequencyRounds; ++j ) {
+			
+				perlinHeightMap[i] += frequencies[j] * this._perlin.perlin2( x / frequencies[j] / 2, y / frequencies[j] / 2 );
+				
+			}
+		
+		}
+		
+		this._normalizeHeightMap( perlinHeightMap );
+		return perlinHeightMap;
+	
+	},
+	
+	_cleanup: function () {
+	
+		delete this._perlin;
+	
 	}
 
 }
