@@ -135,7 +135,7 @@ PELINAL.FortuneVoronoi.prototype = {
 }
 
 
-PELINAL.Landmass = function ( position ) {
+PELINAL.Landmass = function ( position, scene ) {
 	// ad hoc tweakabe settings
 	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
 	var _siteCount = 10;
@@ -179,6 +179,20 @@ PELINAL.Landmass = function ( position ) {
 		color: new THREE.Color( 0xccffaa ),
 		// wireframe: true
 	 }));
+	 
+	 this.octree = new THREE.Octree({
+		// scene: scene,
+		undeferred: true,
+		// set the max depth of tree
+		// depthMax: 4,
+		// max number of objects before nodes split or merge
+		objectsThreshold: 512,
+		// percent between 0 and 1 that nodes will overlap each other
+		// helps insert objects that lie over more than one node
+		overlapPct: 0.1
+	});
+	this.octree.add( this._mesh, { useFaces: true } );
+	this.octree.update();
 	
 }
 
@@ -187,6 +201,8 @@ PELINAL.Landmass.prototype = {
 	constructor: PELINAL.Landmass,
 	_perlin: null, _diagram: null,
 	_mesh: null, _geometry: null, position: null,
+	
+	octree: null,
 	
 	_quickDistance: function ( x, y, site ) {
 		
