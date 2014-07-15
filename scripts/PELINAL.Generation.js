@@ -50,7 +50,8 @@ PELINAL.PerlinGenerator.prototype = {
 		
 		}
 		
-		val = Math.floor( val );
+		//val = Math.floor( val );
+		val = ~~ val;
 		if ( val < 256 ) {
 		
 			val |= val << 8;
@@ -135,12 +136,59 @@ PELINAL.FortuneVoronoi.prototype = {
 }
 
 
-PELINAL.Landmass = function ( position, scene ) {
+PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grassTexturePath, scene ) {
+	// TEXTURES
+	this._cliffTexture = THREE.ImageUtils.loadTexture( cliffTexturePath );
+	this._cliffTexture.wrapS = THREE.RepeatWrapping;
+	this._cliffTexture.wrapT = THREE.RepeatWrapping;
+	this._cliffTexture.minFilter = THREE.NearestFilter;
+	this._cliffTexture.magFilter = THREE.NearestFilter;
+	
+	this._sandTexture = THREE.ImageUtils.loadTexture( sandTexturePath );
+	this._sandTexture.wrapS = THREE.RepeatWrapping;
+	this._sandTexture.wrapT = THREE.RepeatWrapping;
+	this._sandTexture.minFilter = THREE.NearestFilter;
+	this._sandTexture.magFilter = THREE.NearestFilter;
+	
+	this._grassTexture = THREE.ImageUtils.loadTexture( grassTexturePath );
+	this._grassTexture.wrapS = THREE.RepeatWrapping;
+	this._grassTexture.wrapT = THREE.RepeatWrapping;
+	this._grassTexture.minFilter = THREE.NearestFilter;
+	this._grassTexture.magFilter = THREE.NearestFilter;
+
+	// UNIFORMS
+	this._uniforms = THREE.UniformsUtils.merge( [ THREE.UniformsLib.lights, {
+		diffuse: { type: "c", value: new THREE.Color( 0x0067aa ) },
+		// opacity: { type: "f", value: 1.0 },
+		ambient: { type: "c", value: new THREE.Color( 0x0067aa ) },
+		emissive: { type: "c", value: new THREE.Color( 0xffffff ) },
+		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
+		shininess: { type: "f", value: 5 },
+	 } ] );
+	this._uniforms.cliffMap = { type: "t", value: this._cliffTexture };	//workaround for texture id lost in uniforms merge
+	this._uniforms.sandMap = { type: "t", value: this._sandTexture };	//workaround for texture id lost in uniforms merge
+	this._uniforms.grassMap = { type: "t", value: this._grassTexture };	//workaround for texture id lost in uniforms merge
+	
+	// MATERIAL
+	this._material = new THREE.ShaderMaterial({
+		skinning: false,
+		morphTargets: false,
+		morphNormals: false,
+		fog: false,
+		lights: true,
+		uniforms: this._uniforms,
+		//shading: THREE.SmoothShading, // todo
+		depthTest: true,
+		depthWrite: true,
+		vertexShader: PELINAL.ShaderLib.Landmass.vertexShader,
+		fragmentShader: PELINAL.ShaderLib.Landmass.fragmentShader
+	 });
+
 	// ad hoc tweakabe settings
 	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
 	var _siteCount = 10;
 	var _perlinFrequencies = [ 2, 4, 8 ];
-	var _stepArity = 5;
+	var _stepArity = 2;
 	var _turbulenceAmp = 800; var _turbulenceFreq = 2000;
 	
 	this._perlin = new PELINAL.PerlinGenerator( position.x );
@@ -175,10 +223,11 @@ PELINAL.Landmass = function ( position, scene ) {
 	}
 	this._geometry.computeFaceNormals();
 	this._geometry.computeVertexNormals();
-	this._mesh = new THREE.Mesh( this._geometry, new THREE.MeshLambertMaterial({ 
-		color: new THREE.Color( 0xccffaa ),
+	this._mesh = new THREE.Mesh( this._geometry, this._material );
+	// new THREE.MeshLambertMaterial({ 
+		// color: new THREE.Color( 0xccffaa ),
 		// wireframe: true
-	 }));
+	 // }));
 	 
 	 this.octree = new THREE.Octree({
 		// scene: scene,
@@ -201,6 +250,7 @@ PELINAL.Landmass.prototype = {
 	constructor: PELINAL.Landmass,
 	_perlin: null, _diagram: null,
 	_mesh: null, _geometry: null, position: null,
+	_material: null, _uniforms: null, _cliffTexture: null, _sandTexture: null,
 	
 	octree: null,
 	
@@ -229,7 +279,7 @@ PELINAL.Landmass.prototype = {
 		//todo: heuristic for deciding step heights?
 		var rounds = heightMap.length;
 		for ( var i = 0; i < rounds; ++i ) {
-		
+			// height map must be normalized to [ -1, 1 ] 
 			heightMap[i] = ~~ ( heightMap[i] * 100 / stepArity ) * stepArity / 100;
 		
 		}

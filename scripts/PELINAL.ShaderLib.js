@@ -49,7 +49,7 @@ PELINAL.ShaderLib = {
 					"vWorldPosition = worldPosition.xyz;",
 			"	#endif",
 			"}"
-		].join("\n"),
+		].join( "\n" ),
 
 		fragmentShader:
 		[
@@ -232,11 +232,63 @@ PELINAL.ShaderLib = {
 			"	totalDiffuse = floor( totalDiffuse * 10.0 ) * 0.1;",	// cel-shading. don't think i want this on ocean...
 			"		gl_FragColor.xyz = gl_FragColor.xyz * ( emissive + totalDiffuse + ambientLightColor * ambient + totalSpecular );",
 			"}"
-		].join("\n")
+		].join( "\n" )
 	},
 	
-	Terrain: {
-		vertexShader: [],
-		fragmentShader: []
+	Landmass: {
+		vertexShader: [
+			//attribute vec3 position;		// typical attributes done for us by three.js
+			//attribute mat4 modelMatrix;
+			//attribute mat4 modelViewMatrix
+			//attribute mat4 projectionMatrix
+			//attribute mat3 normalMatrix
+			//attribute vec3 normal;
+			"uniform sampler2D cliffMap;",
+			"uniform sampler2D sandMap;",
+			"uniform sampler2D grassMap;",
+			"varying vec3 vNormal;",
+			"varying vec3 vViewPosition;",
+			"varying vec3 vWorldPosition;",
+			
+			"void main() {",
+			"	//world space -> tex coords",
+			"	vec4 worldPosition = modelMatrix * vec4( position, 1.0 );",
+			"	vNormal = normal;",
+
+			"	gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
+			"	vViewPosition = -1.0 * vec3( position );",			
+
+			"	vWorldPosition = worldPosition.xyz;",
+			"}"
+		].join( "\n" ),
+		fragmentShader:
+		[
+			"uniform sampler2D cliffMap;",
+			"uniform sampler2D sandMap;",
+			"uniform sampler2D grassMap;",
+			"varying vec3 vNormal;",
+			"varying vec3 vViewPosition;",
+			"varying vec3 vWorldPosition;",
+			
+			"void main() {",
+			"	vec2 xyUv = vec2( vWorldPosition.x, vWorldPosition.y );",
+			"	vec2 xzUv = vec2( vWorldPosition.x, vWorldPosition.z );",
+			"	vec2 yzUv = vec2( vWorldPosition.z, vWorldPosition.y );",	// note!
+			
+			"	vec3 trip = abs( normalize( vNormal ) );",
+			"	trip = ( trip - vec3( 0.0, 0.2, 0.0 ) ) * 7.0;", 
+			"	trip.x = max( trip.x, 0.0 );",
+			"	trip.y = max( trip.y, 0.0 );",
+			"	trip.z = max( trip.z, 0.0 );",
+			"	trip /= ( trip.x + trip.y + trip.z );",
+			
+			"	vec2 xy = fract(xyUv/5000.0);",
+			"	vec2 xz = fract(xzUv/500.0);",
+			"	vec2 yz = fract(yzUv/5000.0);",
+			"	gl_FragColor = ( trip.x * texture2D( cliffMap, yz ) )",
+			"		+ ( mix( trip.y * texture2D( sandMap, xz ), trip.y * texture2D( grassMap, xz ), min( 1.0, vWorldPosition.y / 2400.0 ) ) );",	// todo; this fades from sand to grass as you go up. want something more generalizable/looks better
+			"		+ ( trip.z * texture2D( cliffMap, xy ) );",
+			"}"
+		].join( "\n" )
 	}
 };

@@ -76,7 +76,7 @@ function init() {
 	scene.add( ocean._mesh );
 
 	//TEST LANDMASS
-	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ), scene );
+	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ), "textures/cliffFace.png", "textures/stonyShore.png", "textures/grass.png", scene );
 	scene.add( landmass._mesh );
 	
 	//BOAT
