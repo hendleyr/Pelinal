@@ -89,6 +89,130 @@ PELINAL.Menu.prototype = {
 
 }
 
+PELINAL.Player = function ( scene, modelPath ) {
+
+	// PLAYER MODEL
+	modelPath = modelPath || 'models/toon/toon.js';
+	this._scene = scene;
+	new THREE.JSONLoader().load( modelPath, function ( geometry, materials ) {
+		
+		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
+		this._materials = this._mesh.material.materials;
+		
+		// enable skinning on all materials
+		for ( var i = 0; i < materials.length; ++i ) {
+			var mat = materials[i];
+			mat.skinning = true;
+		}
+		this._scene.add( this._mesh );
+		
+		// ANIMATIONS
+		// THREE.AnimationHandler.add( mesh.geometry.animations[0] );
+		// THREE.AnimationHandler.add( mesh.geometry.animations[1] );
+		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
+		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
+		
+	}.bind( this ) );
+
+},
+
+PELINAL.Player.prototype = {
+
+	constructor: PELINAL.Player,
+	position: new THREE.Vector3(),
+	_controls: null, _mesh: null, _animations: [],
+	_scene: null,
+	
+	setControls: function ( controls ) {
+		
+		this._controls = controls;
+		
+	}
+},
+
+PELINAL.OrbitControls = function ( camera, target, containerElement ) {
+
+	this._camera = camera;
+	this._quat = new THREE.Quaternion().setFromUnitVectors( camera.up, new THREE.Vector3( 0, 1, 0 ) );
+	this._quatInverse = this._quat.clone().inverse();
+	this._target = target;
+	this._containerElement = containerElement;
+	this._isEnabled = false;
+	
+	document.addEventListener( 'mousemove', this.onMouseMove.bind( this ), false );
+	document.addEventListener( 'mousewheel', this.onMouseWheel.bind( this ), false );
+	
+	this.update();
+},
+
+PELINAL.OrbitControls.prototype = {
+
+	constructor: PELINAL.OrbitControls,
+	_camera: null, _target: new THREE.Vector3(), _offset: new THREE.Vector3(1, 0, 0),
+	_quat: null, _quatInverse: null,
+	_containerElement: null, _isEnabled: false,
+	_xSensitivity: -0.002, _ySensitivity: -0.002,
+	_pitch: 0, _minPitch: Math.PI / 16, _maxPitch: Math.PI - Math.PI / 16, _pitchDelta: 0,
+	_yaw: 0, _yawDelta: 0,
+	_zoom: 10, _offsetMin: 800, _offsetMax: 1000,
+	
+	update: function () {
+	
+		if ( this._isEnabled === false ) { return; }
+		
+		// find camera's offset from target
+		this._offset.subVectors( this._camera.position, this._target );
+		this._offset.applyQuaternion( this._quat );
+		
+		this._yaw = Math.atan2( this._offset.x, this._offset.z );
+		this._pitch = Math.atan2( Math.sqrt( this._offset.x * this._offset.x + this._offset.z * this._offset.z ), this._offset.y );
+
+		this._yaw += this._yawDelta;
+		this._pitch += this._pitchDelta;
+		
+		// clamp pitch between our defined min and max angles
+		this._pitch = Math.max( this._minPitch, Math.min( this._maxPitch, this._pitch ) );
+				
+		var offsetRadius = this._offset.length(); //* this._zoom;
+		offsetRadius = Math.max( this._offsetMin, Math.min( this._offsetMax, offsetRadius ) );
+		
+		this._offset.x = offsetRadius * Math.sin( this._pitch ) * Math.sin( this._yaw );
+		this._offset.y = offsetRadius * Math.cos( this._pitch );
+		this._offset.z = offsetRadius * Math.sin( this._pitch ) * Math.cos( this._yaw );
+		
+		this._offset.applyQuaternion( this._quatInverse );
+		this._camera.position.addVectors( this._offset, this._target );
+		
+		this._camera.lookAt( this._target );
+		this._yawDelta = 0;
+		this._pitchDelta = 0;
+				
+	},
+	onMouseMove: function ( event ) {
+		
+		if ( this._isEnabled === false ) { return; }
+
+		this._yawDelta = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+		this._pitchDelta = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+				
+		this._yawDelta *= this._xSensitivity;
+		this._pitchDelta *= this._ySensitivity;
+		
+		this.update();
+		
+	},
+	onMouseWheel: function ( event ) {
+		
+		if ( this._isEnabled === false ) { return; }
+		
+		event.preventDefault();
+		event.stopPropagation();
+		//todo
+	},	
+	enable: function () { this._isEnabled = true; },
+	disable: function () { this._isEnabled = false; },
+},
+
 
 PELINAL.FirstPersonControls = function ( camera ) {
 

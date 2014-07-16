@@ -23,6 +23,7 @@ var camera, controls, scene, renderer;
 var landmass;
 var mesh, texture;
 var boat;
+var player;
 var skybox, ocean;
 var directionalLight;
 
@@ -48,11 +49,14 @@ function init() {
 	document.body.appendChild( stats.domElement );
 
 	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 33690 );
-	camera.position.y =	2250;
+	camera.position.z = 500;
+	// camera.position.y =	2250;
 
-	scene = new THREE.Scene();
-
-	controls = new PELINAL.FirstPersonControls( camera );	
+	scene = new THREE.Scene();	
+	player = new PELINAL.Player( scene );
+	
+	// controls = new PELINAL.FirstPersonControls( camera );	
+	controls = new PELINAL.OrbitControls( camera, player.position, document.body );
 	menu = new PELINAL.Menu( 'blocker', 'instructions', controls );
 
 	var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
@@ -157,7 +161,7 @@ function animate() {
 function render() {
 
 	var delta = clock.getDelta();
-	controls.update( delta );	
+	// controls.update( delta );	
 	
 	ocean.scroll( camera.position );
 	ocean.animate( delta );
