@@ -53,11 +53,9 @@ function init() {
 	// camera.position.y =	2250;
 
 	scene = new THREE.Scene();	
-	player = new PELINAL.Player( scene );
-	
-	// controls = new PELINAL.FirstPersonControls( camera );	
-	controls = new PELINAL.OrbitControls( camera, player.position, document.body );
-	menu = new PELINAL.Menu( 'blocker', 'instructions', controls );
+	player = new PELINAL.Player( scene, camera );
+		
+	menu = new PELINAL.Menu( 'blocker', 'instructions', player._cameraControls );
 
 	var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
 	scene.add( ambientLight );
@@ -82,6 +80,7 @@ function init() {
 	//TEST LANDMASS
 	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ), "textures/cliffFace.png", "textures/stonyShore.png", "textures/grass.png", scene );
 	scene.add( landmass._mesh );
+	player.setSceneGraph( landmass.octree );
 	
 	//BOAT
 	var manager = new THREE.LoadingManager();
@@ -152,7 +151,7 @@ function animate() {
 		// toonMesh.position.y = boat.position.y + 480;
 		// toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
 	// }
-	
+	player.update( clock.getDelta() );
 	render();
 	stats.update();
 	

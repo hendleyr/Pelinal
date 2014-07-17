@@ -58,6 +58,8 @@ PELINAL.Menu.prototype = {
 	_lockElement: null, _hasPointerLock: false, _blockerElement: null, _instructionsElement: null,
 	_controls: null,
 
+	setControls: function ( controls ) { this._controls = controls;	},
+	
 	pointerLockOn: function ( event ) {
 
 		this._instructionsElement.style.display = 'none';
@@ -69,12 +71,12 @@ PELINAL.Menu.prototype = {
 
 		if ( document.pointerLockElement === this._lockElement || document.mozPointerLockElement === this._lockElement || document.webkitPointerLockElement === this._lockElement ) {
 
-			if ( this._controls.enable ) { this._controls.enable(); }
+			if ( this._controls && this._controls.enable ) { this._controls.enable(); }
 			this._blockerElement.style.display = 'none';
 
 		} else {
 
-			if ( this._controls.disable ) { this._controls.disable(); }
+			if ( this._controls && this._controls.disable ) { this._controls.disable(); }
 
 			this._blockerElement.style.display = '-webkit-box';
 			this._blockerElement.style.display = '-moz-box';
@@ -89,30 +91,19 @@ PELINAL.Menu.prototype = {
 
 }
 
-PELINAL.Player = function ( scene, modelPath ) {
+
+PELINAL.Player = function ( scene, camera, modelPath ) {
 
 	// PLAYER MODEL
 	modelPath = modelPath || 'models/toon/toon.js';
 	this._scene = scene;
-	new THREE.JSONLoader().load( modelPath, function ( geometry, materials ) {
-		
-		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
-		this._materials = this._mesh.material.materials;
-		
-		// enable skinning on all materials
-		for ( var i = 0; i < materials.length; ++i ) {
-			var mat = materials[i];
-			mat.skinning = true;
-		}
-		this._scene.add( this._mesh );
-		
-		// ANIMATIONS
-		// THREE.AnimationHandler.add( mesh.geometry.animations[0] );
-		// THREE.AnimationHandler.add( mesh.geometry.animations[1] );
-		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
-		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
-		
-	}.bind( this ) );
+	this._camera = camera;
+	new THREE.JSONLoader().load( modelPath, this._load.bind( this ) );
+	
+	// CONTROLS
+	//this._cameraControls = new PELINAL.FirstPersonCameraControls( this._camera );
+	this._cameraControls = new PELINAL.OrbitCameraControls( this._camera, this.position, document.body );
+	this._playerControls = new PELINAL.KeyboardControls();
 
 },
 
@@ -120,17 +111,166 @@ PELINAL.Player.prototype = {
 
 	constructor: PELINAL.Player,
 	position: new THREE.Vector3(),
-	_controls: null, _mesh: null, _animations: [],
+	boundingBox: new THREE.Object3D(),
+	moveSpeed: 9200,
+	_mesh: new THREE.Object3D(), _animations: [], _isLoaded: false,
 	_scene: null,
+	_camera: null,
+	_cameraControls: null, _playerControls: null,
+	_velocity: new THREE.Vector3(),
+	_friction: 10,
+	_gravity: 100,
+	_octree: null,
 	
-	setControls: function ( controls ) {
+	_load: function ( geometry, materials ) {
+
+		// MESH
+		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
+		this._mesh.position = this.position;
+		this._scene.add( this._mesh );
+		this.boundingBox = new THREE.BoundingBoxHelper( this._mesh, 0xff0000 );
+		this.boundingBox.update();
+		// this.boundingBox.visible = false;
+		this._scene.add( this.boundingBox );
 		
-		this._controls = controls;
+		// ANIMATIONS
+		// enable skinning on all materials
+		this._materials = this._mesh.material.materials;
+		for ( var i = 0; i < materials.length; ++i ) {
+			var mat = materials[i];
+			mat.skinning = true;
+		}
+		
+		// THREE.AnimationHandler.add( mesh.geometry.animations[0] );
+		// THREE.AnimationHandler.add( mesh.geometry.animations[1] );
+		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
+		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
+		
+	},
+	
+	setSceneGraph: function ( octree ) {
+	
+		this._octree = octree;
+	
+	},
+	
+	collisions: function ( delta ) {
+	
+		// get faces collection from octree
+		// perform separation of axes with bounding box on each face
+		// find minimal translation vector if any
+	
+	},
+	
+	update: function ( delta ) {
+	
+		this._velocity.x -= this._velocity.x * this._friction * delta;
+		// this._velocity.y -= this._velocity.y + delta * this._gravity;
+		this._velocity.z -= this._velocity.z * this._friction * delta;
+	
+		if ( this._playerControls.moveForward ) { this._velocity.z -= this.moveSpeed * delta; }
+		if ( this._playerControls.moveBackWard ) { this._velocity.z += this.moveSpeed * delta; }
+		if ( this._playerControls.moveLeft ) { this._velocity.x -= this.moveSpeed * delta; }
+		if ( this._playerControls.moveRight ) { this._velocity.x += this.moveSpeed * delta; }
+		
+		// translate 'forward' along camera's look vector
+		this._mesh.translateOnAxis( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize(), this._velocity.z * delta );
+		
+		// translate 'sideways' along look vector x up
+		this._mesh.translateOnAxis( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize(), this._velocity.x * delta );
+		
+		// simple downward translate
+		this._mesh.translateY( this._velocity.y * delta );
+		
+		this.boundingBox.update();
+		this._cameraControls.update();
+	
+	},
+	
+	setCameraControls: function ( cameraControls ) {
+		
+		if ( this._cameraControls ) { delete this._cameraControls; }
+		this._cameraControls = cameraControls;
 		
 	}
+	
 },
 
-PELINAL.OrbitControls = function ( camera, target, containerElement ) {
+
+PELINAL.KeyboardControls = function () {
+	
+	document.addEventListener( 'keydown', this.onKeyDown.bind( this ), false );
+	document.addEventListener( 'keyup', this.onKeyUp.bind( this ), false );
+	
+},
+
+PELINAL.KeyboardControls.prototype = {
+	
+	constructor: PELINAL.KeyboardControls,
+	_isEnabled: true,
+	_forwardKey: 87,		// w
+	_leftKey: 65,			// a
+	_backwardKey: 83,	// s
+	_rightKey: 68,			// d
+	moveForward: false, moveBackWard: false, moveLeft: false, moveRight: false,
+	
+	update: function ( delta ) {	},
+	enable: function () { this._isEnabled = true; },
+	disable: function () { this._isEnabled = false; },
+	
+	onKeyDown: function ( event ) {
+		
+		if ( this._isEnabled === false ) { return; }
+		switch( event.keyCode ) {
+
+			case 87: // w
+				this.moveForward = true;
+				break;
+
+			case 65: // a
+				this.moveLeft = true;
+				break;
+
+			case 83: // s
+				this.moveBackWard = true;
+				break;
+
+			case 68: // d
+				this.moveRight = true;
+				break;
+
+		}
+
+	},
+
+	onKeyUp: function ( event ) {
+
+			switch( event.keyCode ) {
+
+			case 87: // w
+				this.moveForward = false;
+				break;
+
+			case 65: // a
+				this.moveLeft = false;
+				break;
+
+			case 83: // s
+				this.moveBackWard = false;
+				break;
+
+			case 68: // d
+				this.moveRight = false;
+				break;
+
+		}
+
+	}
+
+},
+
+
+PELINAL.OrbitCameraControls = function ( camera, target, containerElement ) {
 
 	this._camera = camera;
 	this._quat = new THREE.Quaternion().setFromUnitVectors( camera.up, new THREE.Vector3( 0, 1, 0 ) );
@@ -145,10 +285,10 @@ PELINAL.OrbitControls = function ( camera, target, containerElement ) {
 	this.update();
 },
 
-PELINAL.OrbitControls.prototype = {
+PELINAL.OrbitCameraControls.prototype = {
 
-	constructor: PELINAL.OrbitControls,
-	_camera: null, _target: new THREE.Vector3(), _offset: new THREE.Vector3(1, 0, 0),
+	constructor: PELINAL.OrbitCameraControls,
+	_camera: null, _target: new THREE.Vector3(), _offset: new THREE.Vector3(1, 0, 0), _lookVector: new THREE.Vector3( -1, 0, 0 ),
 	_quat: null, _quatInverse: null,
 	_containerElement: null, _isEnabled: false,
 	_xSensitivity: -0.002, _ySensitivity: -0.002,
@@ -162,6 +302,7 @@ PELINAL.OrbitControls.prototype = {
 		
 		// find camera's offset from target
 		this._offset.subVectors( this._camera.position, this._target );
+		this._lookVector = this._lookVector.copy( this._offset ).normalize(); //.multiplyScalar( -1 )
 		this._offset.applyQuaternion( this._quat );
 		
 		this._yaw = Math.atan2( this._offset.x, this._offset.z );
@@ -188,6 +329,7 @@ PELINAL.OrbitControls.prototype = {
 		this._pitchDelta = 0;
 				
 	},
+	
 	onMouseMove: function ( event ) {
 		
 		if ( this._isEnabled === false ) { return; }
@@ -198,9 +340,10 @@ PELINAL.OrbitControls.prototype = {
 		this._yawDelta *= this._xSensitivity;
 		this._pitchDelta *= this._ySensitivity;
 		
-		this.update();
+		// this.update();
 		
 	},
+	
 	onMouseWheel: function ( event ) {
 		
 		if ( this._isEnabled === false ) { return; }
@@ -209,57 +352,32 @@ PELINAL.OrbitControls.prototype = {
 		event.stopPropagation();
 		//todo
 	},	
+	
 	enable: function () { this._isEnabled = true; },
 	disable: function () { this._isEnabled = false; },
 },
 
 
-PELINAL.FirstPersonControls = function ( camera ) {
+PELINAL.FirstPersonCameraControls = function ( camera ) {
 
 	camera.rotation.set( 0, 0, 0 );
-	camera.rotation.order = "YXZ";	// we'll never rotate around Z, so this keeps things very simple //todo: understand quaternions
+	camera.rotation.order = "YXZ";	// we'll never rotate around Z, so this keeps things very simple //todo: quaternion cam for oculus
 
 	this._camera = camera;
 	this._isEnabled = false;
-	this._velocity = new THREE.Vector3( 0, 0, 0 );
 
-	document.addEventListener( 'mousemove', this.onMouseMove.bind( this ), false );
-	document.addEventListener( 'keydown', this.onKeyDown.bind( this ), false );
-	document.addEventListener( 'keyup', this.onKeyUp.bind( this ), false );
-
+	document.addEventListener( 'mousemove', this.onMouseMove.bind( this ), false );	
+	
 }
 
-PELINAL.FirstPersonControls.prototype = {
+PELINAL.FirstPersonCameraControls.prototype = {
 
-	constructor: PELINAL.FirstPersonControls,
+	constructor: PELINAL.FirstPersonCameraControls,
 	_camera: null, _velocity: null,
-	_isEnabled: false, _isMovingForward: false, _isMovingLeft: false, _isMovingBackward: false, _isMovingRight: false,
-	_friction: 10, _moveSpeed: 6400 * 4,
+	_isEnabled: false,
 	_sensitivity: 0.002,
-	_forwardKey: 87,		// w
-	_leftKey: 65,			// a
-	_backwardKey: 83,	// s
-	_rightKey: 68,			// d
 
-
-	update: function ( delta ) {
-
-		if ( this._isEnabled === false ) { return; }
-		// todo: will need to check collisions etc later
-		this._velocity.x -= this._velocity.x * this._friction * delta;
-		this._velocity.z -= this._velocity.z * this._friction * delta;
-
-
-		if ( this._isMovingForward ) { this._velocity.z -= this._moveSpeed * delta; }
-		if ( this._isMovingBackward ) { this._velocity.z += this._moveSpeed * delta; }
-
-		if ( this._isMovingLeft ) { this._velocity.x -= this._moveSpeed * delta; }
-		if ( this._isMovingRight ) { this._velocity.x += this._moveSpeed * delta; }
-		
-		this._camera.translateX( this._velocity.x * delta );
-		this._camera.translateZ( this._velocity.z * delta );
-
-	},
+	update: function ( delta ) {	},
 	
 	enable: function () { this._isEnabled = true; },
 	disable: function () { this._isEnabled = false; },
@@ -276,54 +394,6 @@ PELINAL.FirstPersonControls.prototype = {
 		this._camera.rotation.x = Math.max( - PI_2, Math.min( PI_2, this._camera.rotation.x ) );	// clamp pitch to up/down vectors
 
 	},
-
-	onKeyDown: function ( event ) {
-
-		switch( event.keyCode ) {
-
-			case 87: // w
-				this._isMovingForward = true;
-				break;
-
-			case 65: // a
-				this._isMovingLeft = true;
-				break;
-
-			case 83: // s
-				this._isMovingBackward = true;
-				break;
-
-			case 68: // d
-				this._isMovingRight = true;
-				break;
-
-		}
-
-	},
-
-	onKeyUp: function ( event ) {
-
-			switch( event.keyCode ) {
-
-			case 87: // w
-				this._isMovingForward = false;
-				break;
-
-			case 65: // a
-				this._isMovingLeft = false;
-				break;
-
-			case 83: // s
-				this._isMovingBackward = false;
-				break;
-
-			case 68: // d
-				this._isMovingRight = false;
-				break;
-
-		}
-
-	}
 
 }
 
