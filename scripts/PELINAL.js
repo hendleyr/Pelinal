@@ -154,11 +154,103 @@ PELINAL.Player.prototype = {
 	
 	},
 	
-	collisions: function ( delta ) {
+	handleCollisions: function ( delta ) {
+		// Adapted with thanks to:
+		// Ned Greene, "Detecting Intersection of a Rectangular Solid and a Convex Polyhedron."
+		//		Graphics Gems IV, 1994.
 	
+		var box = this.boundingBox.box;
 		// get faces collection from octree
-		// perform separation of axes with bounding box on each face
-		// find minimal translation vector if any
+		var results = this._octree.search( this._mesh.position, 100 );
+		var resultCount = results.length;
+		
+		var collision = false;
+		for ( var i = 0; i < resultCount && !collision; ++i ) {
+		
+			if ( results[i].face3 === true ) {
+				// grab the vertices of the face, compare face bounding box with our box
+				var vertexA = results[i].object.geometry.vertices[ results[i].faces.a ];
+				var vertexB = results[i].object.geometry.vertices[ results[i].faces.b ];
+				var vertexC = results[i].object.geometry.vertices[ results[i].faces.c ];
+				
+				// test polygon bounding box against our box
+				var faceBox = new THREE.Box3().setFromPoints( [ vertexA, vertexB, vertexC ] );
+				if ( faceBox.isIntersectionBox( box ) ) {
+					
+					// ruled out type 1 separating plane; now test for intersection with plane
+					var plane = new THREE.Plane().setFromNormalAndCoplanarPoint( results[i].faces.normal, vertexA );
+					
+					// find p-vertex and n-vertex; determined by octant of plane normal
+					var pVertex = new THREE.Vector3();
+					var nVertex = new THREE.Vector3();
+					if ( plane.normal.x > 0 ) {
+						pVertex.x = box.max.x;
+						nVertex.x = box.min.x;
+					} else {
+						pVertex.x = box.min.x;
+						nVertex.x = box.max.x;
+					}
+					if ( plane.normal.y > 0 ) {
+						pVertex.y = box.max.y;
+						nVertex.y = box.min.y;
+					} else {
+						pVertex.y = box.min.y;
+						nVertex.y = box.max.y;
+					}
+					if ( plane.normal.z > 0 ) {
+						pVertex.z = box.max.z;
+						nVertex.z = box.min.z;
+					} else {
+						pVertex.z = box.min.z;
+						nVertex.z = box.max.z;
+					}				
+					
+					var line = new THREE.Line3( pVertex, nVertex );					
+					if ( plane.isIntersectionLine( line ) ) {
+						
+						// ruled out type 2 separating plane; now test orthographic projection of edges
+						var intersecting = true;
+						
+						// god forgive me for what I'm about to do						
+						// (ay – by)x + (ax – bx)y + (ax*by – bx*ay) = 0
+						if ( 	( ( vertexA.y - vertexB.y ) * pVertex.y + ( vertexB.x - vertexA.x ) * pVertex.x + ( vertexA.x * vertexB.y - vertexB.x * vertexA.y ) < 0 )	// xy
+							||	( ( vertexB.y - vertexC.y ) * pVertex.y + ( vertexC.x - vertexB.x ) * pVertex.x + ( vertexB.x * vertexC.y - vertexC.x * vertexA.y ) < 0 )
+							||	( ( vertexC.y - vertexA.y ) * pVertex.y + ( vertexA.x - vertexC.x ) * pVertex.x + ( vertexC.x * vertexA.y - vertexA.x * vertexC.y ) < 0 )
+									
+							||	( ( vertexA.y - vertexB.y ) * nVertex.y + ( vertexB.x - vertexA.x ) * nVertex.x + ( vertexA.x * vertexB.y - vertexB.x * vertexA.y ) > 0 )
+							||	( ( vertexB.y - vertexC.y ) * nVertex.y + ( vertexC.x - vertexB.x ) * nVertex.x + ( vertexB.x * vertexC.y - vertexC.x * vertexA.y ) > 0 )
+							||	( ( vertexC.y - vertexA.y ) * nVertex.y + ( vertexA.x - vertexC.x ) * nVertex.x + ( vertexC.x * vertexA.y - vertexA.x * vertexC.y ) > 0 )
+								
+							||	( ( vertexA.z - vertexB.z ) * pVertex.z + ( vertexB.y - vertexA.y ) * pVertex.y + ( vertexA.y * vertexB.z - vertexB.y * vertexA.z ) < 0 )	// yz
+							||	( ( vertexB.z - vertexC.z ) * pVertex.z + ( vertexC.y - vertexB.y ) * pVertex.y + ( vertexB.y * vertexC.z - vertexC.y * vertexA.z ) < 0 )
+							||	( ( vertexC.z - vertexA.z ) * pVertex.z + ( vertexA.y - vertexC.y ) * pVertex.y + ( vertexC.y * vertexA.z - vertexA.y * vertexC.z ) < 0 )
+									
+							||	( ( vertexA.z - vertexB.z ) * nVertex.z + ( vertexB.y - vertexA.y ) * nVertex.y + ( vertexA.y * vertexB.z - vertexB.y * vertexA.z ) > 0 )
+							||	( ( vertexB.z - vertexC.z ) * nVertex.z + ( vertexC.y - vertexB.y ) * nVertex.y + ( vertexB.y * vertexC.z - vertexC.y * vertexA.z ) > 0 )
+							||	( ( vertexC.z - vertexA.z ) * nVertex.z + ( vertexA.y - vertexC.y ) * nVertex.y + ( vertexC.y * vertexA.z - vertexA.x * vertexC.z ) > 0 )
+								
+							||	( ( vertexA.z - vertexB.z ) * pVertex.z + ( vertexB.x - vertexA.x ) * pVertex.x + ( vertexA.x * vertexB.z - vertexB.x * vertexA.z ) < 0 )	// xz
+							||	( ( vertexB.z - vertexC.z ) * pVertex.z + ( vertexC.x - vertexB.x ) * pVertex.x + ( vertexB.x * vertexC.z - vertexC.x * vertexA.z ) < 0 )
+							||	( ( vertexC.z - vertexA.z ) * pVertex.z + ( vertexA.x - vertexC.x ) * pVertex.x + ( vertexC.x * vertexA.z - vertexA.x * vertexC.z ) < 0 )
+									
+							||	( ( vertexA.z - vertexB.z ) * nVertex.z + ( vertexB.x - vertexA.x ) * nVertex.x + ( vertexA.x * vertexB.z - vertexB.x * vertexA.z ) > 0 )
+							||	( ( vertexB.z - vertexC.z ) * nVertex.z + ( vertexC.x - vertexB.x ) * nVertex.x + ( vertexB.x * vertexC.z - vertexC.x * vertexA.z ) > 0 )
+							||	( ( vertexC.z - vertexA.z ) * nVertex.z + ( vertexA.x - vertexC.x ) * nVertex.x + ( vertexC.x * vertexA.z - vertexA.x * vertexC.z ) > 0 )	) 
+						{ 
+
+							collision = true;
+							console.log( "Hey. I'm reading a collision here. " + box.center );
+						} else { console.log( "Found a type 3 separating plane; no collision!" ) }
+						
+					}
+					else { console.log( "Found a type 2 separating plane; no collision!" ); }
+					
+				} else { console.log( "Found a type 1 separating plane; no collision!" ); }
+							
+			}
+		
+		}
+		// find minimal translation vector and move in its direction
 	
 	},
 	
@@ -184,6 +276,7 @@ PELINAL.Player.prototype = {
 		
 		this.boundingBox.update();
 		this._cameraControls.update();
+		this.handleCollisions( delta );
 	
 	},
 	
