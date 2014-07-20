@@ -170,19 +170,23 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	this._uniforms.grassMap = { type: "t", value: this._grassTexture };	//workaround for texture id lost in uniforms merge
 	
 	// MATERIAL
-	this._material = new THREE.ShaderMaterial({
-		skinning: false,
-		morphTargets: false,
-		morphNormals: false,
-		fog: false,
-		lights: true,
-		uniforms: this._uniforms,
-		//shading: THREE.SmoothShading, // todo
-		depthTest: true,
-		depthWrite: true,
-		vertexShader: PELINAL.ShaderLib.Landmass.vertexShader,
-		fragmentShader: PELINAL.ShaderLib.Landmass.fragmentShader
-	 });
+	this._material = Physijs.createMaterial(
+		new THREE.ShaderMaterial({
+			skinning: false,
+			morphTargets: false,
+			morphNormals: false,
+			fog: false,
+			lights: true,
+			uniforms: this._uniforms,
+			//shading: THREE.SmoothShading, // todo
+			depthTest: true,
+			depthWrite: true,
+			vertexShader: PELINAL.ShaderLib.Landmass.vertexShader,
+			fragmentShader: PELINAL.ShaderLib.Landmass.fragmentShader
+		 }),
+		0.9, // friction
+		0.01 // restitution
+	);
 
 	// ad hoc tweakabe settings
 	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
@@ -193,7 +197,6 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	
 	this._perlin = new PELINAL.PerlinGenerator( position.x );
 	
-	// this._geometry = new THREE.SphereGeometry( landmassX, _detail, _detail, 0, Math.PI * 2, 0, Math.PI / 2 );
 	this._geometry = new THREE.PlaneGeometry( landmassX, _landmassZ, _detail - 1, _detail - 1 );	
 	this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
 	
@@ -212,7 +215,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	this._tuckHeightMap( combinedHeightMap, _detail, 60 );
 	// this._convoluteHeightMap( combinedHeightMap, _detail, 0.25 ); //todo: my convolution filter sucks	
 	
-	var vertices = this._geometry.vertices.length;
+	var vertices = this._geometry.vertices.length; var fk = [];
 	for ( var k = 0; k < vertices; ++k ) {
 		this._geometry.vertices[k].y = 10000 * combinedHeightMap[k];
 		
@@ -221,27 +224,24 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 		this._geometry.vertices[k].z +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		
 	}
+	
 	this._geometry.computeFaceNormals();
 	this._geometry.computeVertexNormals();
-	this._mesh = new THREE.Mesh( this._geometry, this._material );
-	// new THREE.MeshLambertMaterial({ 
-		// color: new THREE.Color( 0xccffaa ),
-		// wireframe: true
-	 // }));
-	 
-	 this.octree = new THREE.Octree({
+	this._mesh = new Physijs.HeightfieldMesh( this._geometry, this._material, 0 ); // mass 0
+	
+	// this.octree = new THREE.Octree({
 		// scene: scene,
-		undeferred: true,
+		// undeferred: true,
 		// set the max depth of tree
 		// depthMax: 4,
 		// max number of objects before nodes split or merge
-		objectsThreshold: 512,
+		// objectsThreshold: 512,
 		// percent between 0 and 1 that nodes will overlap each other
 		// helps insert objects that lie over more than one node
-		overlapPct: 0.1
-	});
-	this.octree.add( this._mesh, { useFaces: true } );
-	this.octree.update();
+		// overlapPct: 0.1
+	// });
+	// this.octree.add( this._mesh, { useFaces: true } );
+	// this.octree.update();
 	
 }
 
@@ -252,7 +252,21 @@ PELINAL.Landmass.prototype = {
 	_mesh: null, _geometry: null, position: null,
 	_material: null, _uniforms: null, _cliffTexture: null, _sandTexture: null,
 	
-	octree: null,
+	fnFixPhysijs: function () {
+	
+		for ( var i = 0; i < this._geometry.length; ++i ) {
+	
+			var temp = this._geometry.vertices[i].y;
+			this._geometry.vertices[i].y = this._geometry.vertices[i].z;
+			this._geometry.vertices[i].z = temp;
+		
+		}
+		this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
+		this._geometry.verticesNeedUpdate = true;
+	
+	},
+	
+	// octree: null,
 	
 	_quickDistance: function ( x, y, site ) {
 		

@@ -18,7 +18,10 @@ if (!Detector.webgl) {
 
 }
 
-var container, stats;
+Physijs.scripts.worker = './scripts/lib/physijs_worker.js';
+Physijs.scripts.ammo = './ammo.js';
+
+var container, render_stats, phys_stats;
 var camera, controls, scene, renderer;
 var landmass;
 var mesh, texture;
@@ -35,7 +38,7 @@ init();
 animate();
 
 function init() {
-
+	
 	renderer = new THREE.WebGLRenderer( { clearAlpha: 1 } );
 	//renderer.setClearColor( 0x42b2da );
 	renderer.setClearColor( 0x18406b );
@@ -43,17 +46,30 @@ function init() {
 	renderer.autoClear = false;
 	document.body.appendChild( renderer.domElement );
 
-	stats = new Stats();
-	stats.domElement.style.position = 'absolute';
-	stats.domElement.style.top = '0px';
-	document.body.appendChild( stats.domElement );
+	render_stats = new Stats();
+	render_stats.domElement.style.position = 'absolute';
+	render_stats.domElement.style.top = '0px';
+	document.body.appendChild( render_stats.domElement );
+	phys_stats = new Stats();
+	phys_stats.domElement.style.position = 'absolute';
+	phys_stats.domElement.style.top = '50px';
+	phys_stats.domElement.style.zIndex = 100;
+	document.body.appendChild( phys_stats.domElement );
 
 	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 33690 );
 	camera.position.z = 500;
-	// camera.position.y =	2250;
 
-	scene = new THREE.Scene();	
-	player = new PELINAL.Player( scene, camera );
+	scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });	//new THREE.Scene();	
+	scene.setGravity(new THREE.Vector3( 0, -700, 0 ));
+	scene.addEventListener(
+		'update',
+		function() {
+			scene.simulate( undefined, 2 );
+			phys_stats.update();
+		}
+	);
+	
+	player = new PELINAL.Player( scene, camera, null, new THREE.Vector3( 0, 3500, 0 ) );
 		
 	menu = new PELINAL.Menu( 'blocker', 'instructions', player._cameraControls );
 
@@ -73,14 +89,14 @@ function init() {
 	texture.needsUpdate = true;
 
 	//SKYBOX and WATER
-	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 25, scene);
+	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 25, scene );
 	ocean = new PELINAL.Ocean( renderer, camera, 50, 0.0002, "textures/water1024.png" );
 	scene.add( ocean._mesh );
 
 	//TEST LANDMASS
 	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ), "textures/cliffFace.png", "textures/stonyShore.png", "textures/grass.png", scene );
 	scene.add( landmass._mesh );
-	player.setSceneGraph( landmass.octree );
+	// player.setSceneGraph( landmass.octree );
 	
 	//BOAT
 	var manager = new THREE.LoadingManager();
@@ -131,6 +147,7 @@ function init() {
 		// animation.play();
 	// });
 	//
+	
 }
 
 function onWindowResize() {
@@ -153,7 +170,7 @@ function animate() {
 	// }
 	player.update( clock.getDelta() );
 	render();
-	stats.update();
+	render_stats.update();
 	
 }
 

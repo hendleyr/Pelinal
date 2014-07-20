@@ -11,7 +11,7 @@
 	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 	CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.	*/
 
-var PELINAL = { VERSION: 0.1 };
+var PELINAL = { VERSION: 0.11 };
 var PI_2 = Math.PI / 2;
 
 PELINAL.Menu = function ( blockerId, instructionsId, controls ) {
@@ -92,8 +92,22 @@ PELINAL.Menu.prototype = {
 }
 
 
-PELINAL.Player = function ( scene, camera, modelPath ) {
+PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 
+	// MISC
+	// this.position = pos || this.position;
+	this._physicsMesh = new Physijs.BoxMesh(
+		new THREE.BoxGeometry( 200, 200, 200 ),
+		new THREE.MeshLambertMaterial()
+	);
+	this._physicsMesh.mass = 1000;
+	this._physicsMesh.setAngularFactor( { x: 0, y: 0, z: 0 } );
+	this._physicsMesh.position = pos;
+	this._physicsMesh.__dirtyPosition = true;
+	this.position = this._physicsMesh.position;
+	
+	scene.add( this._physicsMesh );
+	
 	// PLAYER MODEL
 	modelPath = modelPath || 'models/toon/toon.js';
 	this._scene = scene;
@@ -111,23 +125,25 @@ PELINAL.Player.prototype = {
 
 	constructor: PELINAL.Player,
 	position: new THREE.Vector3(),
-	boundingBox: new THREE.Object3D(),
+	boundingBox: null,
 	moveSpeed: 9200,
-	_mesh: new THREE.Object3D(), _animations: [], _isLoaded: false,
+	_physicsMesh: null,
+	_mesh: null, _animations: [], _isLoaded: false,
 	_scene: null,
 	_camera: null,
 	_cameraControls: null, _playerControls: null,
 	_velocity: new THREE.Vector3(),
 	_friction: 10,
-	_gravity: 100,
-	_octree: null,
+	// _octree: null,
 	
+	_loaded: false,
 	_load: function ( geometry, materials ) {
 
 		// MESH
 		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
-		this._mesh.position = this.position;
+		// this._mesh.position = this._physicsMesh.position;
 		this._scene.add( this._mesh );
+		this._physicsMesh.add( this._mesh );
 		this.boundingBox = new THREE.BoundingBoxHelper( this._mesh, 0xff0000 );
 		this.boundingBox.update();
 		// this.boundingBox.visible = false;
@@ -140,7 +156,8 @@ PELINAL.Player.prototype = {
 			var mat = materials[i];
 			mat.skinning = true;
 		}
-		
+		this._loaded = true;
+		this._scene.simulate();
 		// THREE.AnimationHandler.add( mesh.geometry.animations[0] );
 		// THREE.AnimationHandler.add( mesh.geometry.animations[1] );
 		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
@@ -148,11 +165,11 @@ PELINAL.Player.prototype = {
 		
 	},
 	
-	setSceneGraph: function ( octree ) {
+	// setSceneGraph: function ( octree ) {
 	
-		this._octree = octree;
+		// this._octree = octree;
 	
-	},
+	// },
 	
 	handleCollisions: function ( delta ) {
 		// Adapted with thanks to:
@@ -164,8 +181,10 @@ PELINAL.Player.prototype = {
 		var results = this._octree.search( this._mesh.position, 100 );
 		var resultCount = results.length;
 		
-		var collision = false;
-		for ( var i = 0; i < resultCount && !collision; ++i ) {
+		// if a collision is found, add the plane normal to this list. after all checks, we repel away from the combination of repulsion vectors. this should work *most* of the time.
+		var repulsionVector = new THREE.Vector3( 0, 0, 0 );
+		
+		for ( var i = 0; i < resultCount; ++i ) {
 		
 			if ( results[i].face3 === true ) {
 				// grab the vertices of the face, compare face bounding box with our box
@@ -211,7 +230,7 @@ PELINAL.Player.prototype = {
 						// ruled out type 2 separating plane; now test orthographic projection of edges
 						var intersecting = true;
 						
-						// god forgive me for what I'm about to do						
+						// god forgive me for what I'm about to do -- checking if orthographic box projections are fully inside/outside a line
 						// (ay – by)x + (ax – bx)y + (ax*by – bx*ay) = 0
 						if ( 	( ( vertexA.y - vertexB.y ) * pVertex.y + ( vertexB.x - vertexA.x ) * pVertex.x + ( vertexA.x * vertexB.y - vertexB.x * vertexA.y ) < 0 )	// xy
 							||	( ( vertexB.y - vertexC.y ) * pVertex.y + ( vertexC.x - vertexB.x ) * pVertex.x + ( vertexB.x * vertexC.y - vertexC.x * vertexA.y ) < 0 )
@@ -236,48 +255,45 @@ PELINAL.Player.prototype = {
 							||	( ( vertexA.z - vertexB.z ) * nVertex.z + ( vertexB.x - vertexA.x ) * nVertex.x + ( vertexA.x * vertexB.z - vertexB.x * vertexA.z ) > 0 )
 							||	( ( vertexB.z - vertexC.z ) * nVertex.z + ( vertexC.x - vertexB.x ) * nVertex.x + ( vertexB.x * vertexC.z - vertexC.x * vertexA.z ) > 0 )
 							||	( ( vertexC.z - vertexA.z ) * nVertex.z + ( vertexA.x - vertexC.x ) * nVertex.x + ( vertexC.x * vertexA.z - vertexA.x * vertexC.z ) > 0 )	) 
-						{ 
-
-							collision = true;
-							console.log( "Hey. I'm reading a collision here. " + box.center );
-						} else { console.log( "Found a type 3 separating plane; no collision!" ) }
+						{
+							// find minimum translation vector we want n-vertex to be just above/on the normal
+							var d = nVertex.x * plane.normal.x + nVertex.y * plane.normal.y + nVertex.z * plane.normal.z + plane.constant;
+							var k = -1 * d / ( plane.normal.x + plane.normal.y + plane.normal.z );
+							// this._velocity.add( plane.normal.multiplyScalar( k ) );
+							this._mesh.position.add( plane.normal.multiplyScalar( k ) );
+							
+							//console.log( "Hey. I'm reading a collision here. " + box.center() );
+						} //else { console.log( "Found a type 3 separating plane; no collision!" ) }
 						
-					}
-					else { console.log( "Found a type 2 separating plane; no collision!" ); }
+					}	//else { console.log( "Found a type 2 separating plane; no collision!" ); }
 					
-				} else { console.log( "Found a type 1 separating plane; no collision!" ); }
+				} //else { console.log( "Found a type 1 separating plane; no collision!" ); }
 							
 			}
 		
 		}
-		// find minimal translation vector and move in its direction
 	
 	},
 	
 	update: function ( delta ) {
+		if ( !this._loaded ) { return; }
 	
-		this._velocity.x -= this._velocity.x * this._friction * delta;
-		// this._velocity.y -= this._velocity.y + delta * this._gravity;
-		this._velocity.z -= this._velocity.z * this._friction * delta;
-	
-		if ( this._playerControls.moveForward ) { this._velocity.z -= this.moveSpeed * delta; }
-		if ( this._playerControls.moveBackWard ) { this._velocity.z += this.moveSpeed * delta; }
-		if ( this._playerControls.moveLeft ) { this._velocity.x -= this.moveSpeed * delta; }
-		if ( this._playerControls.moveRight ) { this._velocity.x += this.moveSpeed * delta; }
+		if ( this._playerControls.moveForward ) {
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( -3500 ), { x:0, y:0, z:0 } );
+		}
+		if ( this._playerControls.moveBackWard ) {
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( 3500 ), { x:0, y:0, z:0 } );
+		}
+		if ( this._playerControls.moveLeft ) { 
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( -3500 ), { x:0, y:0, z:0 } );
+		}
+		if ( this._playerControls.moveRight ) { 
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( 3500 ), { x:0, y:0, z:0 } );
+		}
 		
-		// translate 'forward' along camera's look vector
-		this._mesh.translateOnAxis( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize(), this._velocity.z * delta );
-		
-		// translate 'sideways' along look vector x up
-		this._mesh.translateOnAxis( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize(), this._velocity.x * delta );
-		
-		// simple downward translate
-		this._mesh.translateY( this._velocity.y * delta );
-		
-		this.boundingBox.update();
+		// this.boundingBox.update();
 		this._cameraControls.update();
-		this.handleCollisions( delta );
-	
+		
 	},
 	
 	setCameraControls: function ( cameraControls ) {
