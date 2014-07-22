@@ -95,18 +95,25 @@ PELINAL.Menu.prototype = {
 PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 
 	// MISC
-	// this.position = pos || this.position;
-	this._physicsMesh = new Physijs.BoxMesh(
-		new THREE.BoxGeometry( 200, 200, 200 ),
+	var cap1 = new THREE.SphereGeometry( 25, 8, 8 );
+	cap1.applyMatrix( new THREE.Matrix4().makeTranslation( 0, 50, 0 ) );
+	var cap2 = new THREE.SphereGeometry( 25, 8, 8 );
+	cap2.applyMatrix( new THREE.Matrix4().makeTranslation( 0, -50, 0 ) );
+	var capsule = new THREE.CylinderGeometry( 25, 25, 50, 8, 1, true );
+	capsule.merge( cap1 );
+	capsule.merge( cap2 );
+	this._physicsMesh = new Physijs.CapsuleMesh(
+		capsule,
 		new THREE.MeshLambertMaterial()
 	);
-	this._physicsMesh.mass = 1000;
-	this._physicsMesh.setAngularFactor( { x: 0, y: 0, z: 0 } );
+
 	this._physicsMesh.position = pos;
 	this._physicsMesh.__dirtyPosition = true;
 	this.position = this._physicsMesh.position;
 	
 	scene.add( this._physicsMesh );
+	this._physicsMesh.mass = 100;
+	this._physicsMesh.setAngularFactor( { x: 0, y: 1, z: 0 } );
 	
 	// PLAYER MODEL
 	modelPath = modelPath || 'models/toon/toon.js';
@@ -125,7 +132,6 @@ PELINAL.Player.prototype = {
 
 	constructor: PELINAL.Player,
 	position: new THREE.Vector3(),
-	boundingBox: null,
 	moveSpeed: 9200,
 	_physicsMesh: null,
 	_mesh: null, _animations: [], _isLoaded: false,
@@ -134,6 +140,9 @@ PELINAL.Player.prototype = {
 	_cameraControls: null, _playerControls: null,
 	_velocity: new THREE.Vector3(),
 	_friction: 10,
+	_maxSpeed: 500,	// we want to do this in a physics tick callback
+	_impulse: 2000,
+	_jumpImpulse: 16000,
 	// _octree: null,
 	
 	_loaded: false,
@@ -141,13 +150,10 @@ PELINAL.Player.prototype = {
 
 		// MESH
 		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
+		this._mesh.position.y = -65;// todo: refit model coordinates?
 		// this._mesh.position = this._physicsMesh.position;
 		this._scene.add( this._mesh );
 		this._physicsMesh.add( this._mesh );
-		this.boundingBox = new THREE.BoundingBoxHelper( this._mesh, 0xff0000 );
-		this.boundingBox.update();
-		// this.boundingBox.visible = false;
-		this._scene.add( this.boundingBox );
 		
 		// ANIMATIONS
 		// enable skinning on all materials
@@ -171,127 +177,45 @@ PELINAL.Player.prototype = {
 	
 	// },
 	
-	handleCollisions: function ( delta ) {
-		// Adapted with thanks to:
-		// Ned Greene, "Detecting Intersection of a Rectangular Solid and a Convex Polyhedron."
-		//		Graphics Gems IV, 1994.
-	
-		var box = this.boundingBox.box;
-		// get faces collection from octree
-		var results = this._octree.search( this._mesh.position, 100 );
-		var resultCount = results.length;
-		
-		// if a collision is found, add the plane normal to this list. after all checks, we repel away from the combination of repulsion vectors. this should work *most* of the time.
-		var repulsionVector = new THREE.Vector3( 0, 0, 0 );
-		
-		for ( var i = 0; i < resultCount; ++i ) {
-		
-			if ( results[i].face3 === true ) {
-				// grab the vertices of the face, compare face bounding box with our box
-				var vertexA = results[i].object.geometry.vertices[ results[i].faces.a ];
-				var vertexB = results[i].object.geometry.vertices[ results[i].faces.b ];
-				var vertexC = results[i].object.geometry.vertices[ results[i].faces.c ];
-				
-				// test polygon bounding box against our box
-				var faceBox = new THREE.Box3().setFromPoints( [ vertexA, vertexB, vertexC ] );
-				if ( faceBox.isIntersectionBox( box ) ) {
-					
-					// ruled out type 1 separating plane; now test for intersection with plane
-					var plane = new THREE.Plane().setFromNormalAndCoplanarPoint( results[i].faces.normal, vertexA );
-					
-					// find p-vertex and n-vertex; determined by octant of plane normal
-					var pVertex = new THREE.Vector3();
-					var nVertex = new THREE.Vector3();
-					if ( plane.normal.x > 0 ) {
-						pVertex.x = box.max.x;
-						nVertex.x = box.min.x;
-					} else {
-						pVertex.x = box.min.x;
-						nVertex.x = box.max.x;
-					}
-					if ( plane.normal.y > 0 ) {
-						pVertex.y = box.max.y;
-						nVertex.y = box.min.y;
-					} else {
-						pVertex.y = box.min.y;
-						nVertex.y = box.max.y;
-					}
-					if ( plane.normal.z > 0 ) {
-						pVertex.z = box.max.z;
-						nVertex.z = box.min.z;
-					} else {
-						pVertex.z = box.min.z;
-						nVertex.z = box.max.z;
-					}				
-					
-					var line = new THREE.Line3( pVertex, nVertex );					
-					if ( plane.isIntersectionLine( line ) ) {
-						
-						// ruled out type 2 separating plane; now test orthographic projection of edges
-						var intersecting = true;
-						
-						// god forgive me for what I'm about to do -- checking if orthographic box projections are fully inside/outside a line
-						// (ay – by)x + (ax – bx)y + (ax*by – bx*ay) = 0
-						if ( 	( ( vertexA.y - vertexB.y ) * pVertex.y + ( vertexB.x - vertexA.x ) * pVertex.x + ( vertexA.x * vertexB.y - vertexB.x * vertexA.y ) < 0 )	// xy
-							||	( ( vertexB.y - vertexC.y ) * pVertex.y + ( vertexC.x - vertexB.x ) * pVertex.x + ( vertexB.x * vertexC.y - vertexC.x * vertexA.y ) < 0 )
-							||	( ( vertexC.y - vertexA.y ) * pVertex.y + ( vertexA.x - vertexC.x ) * pVertex.x + ( vertexC.x * vertexA.y - vertexA.x * vertexC.y ) < 0 )
-									
-							||	( ( vertexA.y - vertexB.y ) * nVertex.y + ( vertexB.x - vertexA.x ) * nVertex.x + ( vertexA.x * vertexB.y - vertexB.x * vertexA.y ) > 0 )
-							||	( ( vertexB.y - vertexC.y ) * nVertex.y + ( vertexC.x - vertexB.x ) * nVertex.x + ( vertexB.x * vertexC.y - vertexC.x * vertexA.y ) > 0 )
-							||	( ( vertexC.y - vertexA.y ) * nVertex.y + ( vertexA.x - vertexC.x ) * nVertex.x + ( vertexC.x * vertexA.y - vertexA.x * vertexC.y ) > 0 )
-								
-							||	( ( vertexA.z - vertexB.z ) * pVertex.z + ( vertexB.y - vertexA.y ) * pVertex.y + ( vertexA.y * vertexB.z - vertexB.y * vertexA.z ) < 0 )	// yz
-							||	( ( vertexB.z - vertexC.z ) * pVertex.z + ( vertexC.y - vertexB.y ) * pVertex.y + ( vertexB.y * vertexC.z - vertexC.y * vertexA.z ) < 0 )
-							||	( ( vertexC.z - vertexA.z ) * pVertex.z + ( vertexA.y - vertexC.y ) * pVertex.y + ( vertexC.y * vertexA.z - vertexA.y * vertexC.z ) < 0 )
-									
-							||	( ( vertexA.z - vertexB.z ) * nVertex.z + ( vertexB.y - vertexA.y ) * nVertex.y + ( vertexA.y * vertexB.z - vertexB.y * vertexA.z ) > 0 )
-							||	( ( vertexB.z - vertexC.z ) * nVertex.z + ( vertexC.y - vertexB.y ) * nVertex.y + ( vertexB.y * vertexC.z - vertexC.y * vertexA.z ) > 0 )
-							||	( ( vertexC.z - vertexA.z ) * nVertex.z + ( vertexA.y - vertexC.y ) * nVertex.y + ( vertexC.y * vertexA.z - vertexA.x * vertexC.z ) > 0 )
-								
-							||	( ( vertexA.z - vertexB.z ) * pVertex.z + ( vertexB.x - vertexA.x ) * pVertex.x + ( vertexA.x * vertexB.z - vertexB.x * vertexA.z ) < 0 )	// xz
-							||	( ( vertexB.z - vertexC.z ) * pVertex.z + ( vertexC.x - vertexB.x ) * pVertex.x + ( vertexB.x * vertexC.z - vertexC.x * vertexA.z ) < 0 )
-							||	( ( vertexC.z - vertexA.z ) * pVertex.z + ( vertexA.x - vertexC.x ) * pVertex.x + ( vertexC.x * vertexA.z - vertexA.x * vertexC.z ) < 0 )
-									
-							||	( ( vertexA.z - vertexB.z ) * nVertex.z + ( vertexB.x - vertexA.x ) * nVertex.x + ( vertexA.x * vertexB.z - vertexB.x * vertexA.z ) > 0 )
-							||	( ( vertexB.z - vertexC.z ) * nVertex.z + ( vertexC.x - vertexB.x ) * nVertex.x + ( vertexB.x * vertexC.z - vertexC.x * vertexA.z ) > 0 )
-							||	( ( vertexC.z - vertexA.z ) * nVertex.z + ( vertexA.x - vertexC.x ) * nVertex.x + ( vertexC.x * vertexA.z - vertexA.x * vertexC.z ) > 0 )	) 
-						{
-							// find minimum translation vector we want n-vertex to be just above/on the normal
-							var d = nVertex.x * plane.normal.x + nVertex.y * plane.normal.y + nVertex.z * plane.normal.z + plane.constant;
-							var k = -1 * d / ( plane.normal.x + plane.normal.y + plane.normal.z );
-							// this._velocity.add( plane.normal.multiplyScalar( k ) );
-							this._mesh.position.add( plane.normal.multiplyScalar( k ) );
-							
-							//console.log( "Hey. I'm reading a collision here. " + box.center() );
-						} //else { console.log( "Found a type 3 separating plane; no collision!" ) }
-						
-					}	//else { console.log( "Found a type 2 separating plane; no collision!" ); }
-					
-				} //else { console.log( "Found a type 1 separating plane; no collision!" ); }
-							
-			}
-		
-		}
-	
-	},
-	
 	update: function ( delta ) {
 		if ( !this._loaded ) { return; }
 	
 		if ( this._playerControls.moveForward ) {
-			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( -3500 ), { x:0, y:0, z:0 } );
+			// todo gradually redirect momentum to match look vector
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( -this._impulse ), { x:0, y:0, z:0 } );
 		}
 		if ( this._playerControls.moveBackWard ) {
-			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( 3500 ), { x:0, y:0, z:0 } );
+			// todo gradually redirect momentum to match look vector
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( this._impulse ), { x:0, y:0, z:0 } );
 		}
 		if ( this._playerControls.moveLeft ) { 
-			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( -3500 ), { x:0, y:0, z:0 } );
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( -this._impulse ), { x:0, y:0, z:0 } );
 		}
 		if ( this._playerControls.moveRight ) { 
-			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( 3500 ), { x:0, y:0, z:0 } );
+			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( this._impulse ), { x:0, y:0, z:0 } );
 		}
 		
-		// this.boundingBox.update();
+		//todo: jumping; damp impulses if in air
+		if ( this._playerControls.jump ) {
+			if ( this._physicsMesh._physijs.touches[0] ) {
+				// is touching the ground (or at least one thing), so we can jump
+				this._physicsMesh.applyCentralImpulse( new THREE.Vector3( 0, 1, 0).multiplyScalar( this._jumpImpulse ), { x:0, y:0, z:0 } );
+			}
+		}
+		
+		if ( 		!this._playerControls.moveForward 
+			&& 	!this._playerControls.moveBackWard 
+			&& 	!this._playerControls.moveLeft 
+			&& 	!this._playerControls.moveRight 
+			&& 	!this._playerControls.jump 
+			&& 	this._physicsMesh._physijs.touches[0] 	) {
+			// we're not trying to move, so plant your feet (if on the ground) and resist movement a good amount
+			this._physicsMesh.setDamping( .985, .985 );	// todo: might want less aggressive damping
+		}
+		else {
+			this._physicsMesh.setDamping( .25, .25 );	// todo: not sure about these values
+		}
+		// todo: tweak orbit camera for more smoothness, check for camera collisions
 		this._cameraControls.update();
 		
 	},
@@ -321,7 +245,8 @@ PELINAL.KeyboardControls.prototype = {
 	_leftKey: 65,			// a
 	_backwardKey: 83,	// s
 	_rightKey: 68,			// d
-	moveForward: false, moveBackWard: false, moveLeft: false, moveRight: false,
+	_jumpKey: 32,			// space
+	moveForward: false, moveBackWard: false, moveLeft: false, moveRight: false, jump: false,
 	
 	update: function ( delta ) {	},
 	enable: function () { this._isEnabled = true; },
@@ -330,22 +255,26 @@ PELINAL.KeyboardControls.prototype = {
 	onKeyDown: function ( event ) {
 		
 		if ( this._isEnabled === false ) { return; }
-		switch( event.keyCode ) {
+		switch ( event.keyCode ) {
 
-			case 87: // w
+			case this._forwardKey: // w
 				this.moveForward = true;
 				break;
 
-			case 65: // a
+			case this._leftKey: // a
 				this.moveLeft = true;
 				break;
 
-			case 83: // s
+			case this._backwardKey: // s
 				this.moveBackWard = true;
 				break;
 
-			case 68: // d
+			case this._rightKey: // d
 				this.moveRight = true;
+				break;
+				
+			case this._jumpKey:
+				this.jump = true;
 				break;
 
 		}
@@ -354,22 +283,26 @@ PELINAL.KeyboardControls.prototype = {
 
 	onKeyUp: function ( event ) {
 
-			switch( event.keyCode ) {
+			switch ( event.keyCode ) {
 
-			case 87: // w
+			case this._forwardKey: // w
 				this.moveForward = false;
 				break;
 
-			case 65: // a
+			case this._leftKey: // a
 				this.moveLeft = false;
 				break;
 
-			case 83: // s
+			case this._backwardKey: // s
 				this.moveBackWard = false;
 				break;
 
-			case 68: // d
+			case this._rightKey: // d
 				this.moveRight = false;
+				break;
+				
+			case this._jumpKey:
+				this.jump = false;
 				break;
 
 		}
@@ -448,9 +381,7 @@ PELINAL.OrbitCameraControls.prototype = {
 				
 		this._yawDelta *= this._xSensitivity;
 		this._pitchDelta *= this._ySensitivity;
-		
-		// this.update();
-		
+	
 	},
 	
 	onMouseWheel: function ( event ) {
@@ -764,6 +695,8 @@ PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath )
 		emissive: { type: "c", value: new THREE.Color( 0x000000 ) },
 		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
 		shininess: { type: "f", value: 5 },
+		fogColor: { type: "c", value: new THREE.Color( 0xffffff ) },
+		fogDensity: { type: "f", value: 0.0000025 }
 	 } ] );
 	this._uniforms.map = { type: "t", value: this._texture };	//workaround for texture id lost in uniforms merge
 

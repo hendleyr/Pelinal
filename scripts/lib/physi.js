@@ -1117,7 +1117,7 @@ window.Physijs = (function() {
 			a = i % this._physijs.xpts;
 			b = Math.round( ( i / this._physijs.xpts ) - ( (i % this._physijs.xpts) / this._physijs.xpts ) );
 			
-
+			// points[i] = geometry.vertices[ a + ( ( this._physijs.ypts - b - 1 ) * this._physijs.ypts ) ].y;
 			points[i] = geometry.vertices[i].y;
 		}
 

@@ -158,12 +158,14 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 
 	// UNIFORMS
 	this._uniforms = THREE.UniformsUtils.merge( [ THREE.UniformsLib.lights, {
-		diffuse: { type: "c", value: new THREE.Color( 0x0067aa ) },
+		diffuse: { type: "c", value: new THREE.Color( 0xffffff ) },
 		// opacity: { type: "f", value: 1.0 },
-		ambient: { type: "c", value: new THREE.Color( 0x0067aa ) },
-		emissive: { type: "c", value: new THREE.Color( 0xffffff ) },
+		ambient: { type: "c", value: new THREE.Color( 0xffffff ) },
+		emissive: { type: "c", value: new THREE.Color( 0x000000 ) },
 		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
 		shininess: { type: "f", value: 5 },
+		fogColor: { type: "c", value: new THREE.Color( 0xffffff ) },
+		fogDensity: { type: "f", value: 0.0000025 }
 	 } ] );
 	this._uniforms.cliffMap = { type: "t", value: this._cliffTexture };	//workaround for texture id lost in uniforms merge
 	this._uniforms.sandMap = { type: "t", value: this._sandTexture };	//workaround for texture id lost in uniforms merge
@@ -185,7 +187,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 			fragmentShader: PELINAL.ShaderLib.Landmass.fragmentShader
 		 }),
 		0.9, // friction
-		0.01 // restitution
+		0.01 // restitution;	i can't tell if this is actually doing anything
 	);
 
 	// ad hoc tweakabe settings
@@ -211,7 +213,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	}
 	this._normalizeHeightMap( combinedHeightMap );
 	//todo: erosion
-	this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
+	// this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
 	this._tuckHeightMap( combinedHeightMap, _detail, 60 );
 	// this._convoluteHeightMap( combinedHeightMap, _detail, 0.25 ); //todo: my convolution filter sucks	
 	
@@ -220,8 +222,9 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 		this._geometry.vertices[k].y = 10000 * combinedHeightMap[k];
 		
 		// perturb straight lines. somewhat artificial
-		this._geometry.vertices[k].x +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
-		this._geometry.vertices[k].z +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
+		//TODO: will need to use triangle mesh instead of height field for bullet physics, if i want to stir up the x/z positions. probably just use improved convolution filter
+		// this._geometry.vertices[k].x +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
+		// this._geometry.vertices[k].z +=  ( Math.random() * 0.5 + 0.5 ) * _turbulenceAmp * this._perlin.perlin2( this._geometry.vertices[k].x / _turbulenceFreq, this._geometry.vertices[k].z / _turbulenceFreq );
 		
 	}
 	

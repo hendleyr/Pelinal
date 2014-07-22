@@ -68,6 +68,7 @@ function init() {
 			phys_stats.update();
 		}
 	);
+	scene.fog = new THREE.FogExp2( 0xffffff, 0.00025 );
 	
 	player = new PELINAL.Player( scene, camera, null, new THREE.Vector3( 0, 3500, 0 ) );
 		
@@ -78,9 +79,11 @@ function init() {
 	
 	directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
 	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
-	//sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );
-	
 	scene.add( directionalLight );
+	
+	var light = new THREE.AmbientLight( 0x404040 ); // soft white light
+	scene.add( light );
+	//sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );	
 	
 	texture = THREE.ImageUtils.loadTexture( "textures/sand.png" );
 	texture.wrapS = THREE.RepeatWrapping;
@@ -107,47 +110,10 @@ function init() {
 	};
 	
 	var loader = new THREE.OBJLoader( manager );
-	// loader.load( 'models/boat.obj', function ( object ) {
-		// boat = object;
-		// object.traverse( function ( child ) {
-
-		// } );
-
-		// object.position.y = 80;
-		// scene.add( object );
-		// ocean.floatObject( boat );
-
-	// });
 
 	window.addEventListener('resize', onWindowResize, false);
 	// ocean.floatObject( camera );
-	
-	// var testLoader = new THREE.JSONLoader();
-	
-	// testLoader.load('models/toon/toon.js', function ( geometry, materials ) {
-		// var material;
-		// toonMesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
-		
-		// toonMesh.position.set( 800, 560, 1400 );
-		
-		// material = toonMesh.material.materials;
-		
-		// for ( var i = 0; i < materials.length; ++i ) {
-			// var mat = materials[i];
-			// mat.skinning = true;
-		// }
-		
-		// scene.add( toonMesh );
-		// THREE.AnimationHandler.add( toonMesh.geometry.animations[0] );
-		// THREE.AnimationHandler.add( toonMesh.geometry.animations[1] );
-		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
-		
-		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
-		
-		// animation.play();
-	// });
-	//
-	
+	update();
 }
 
 function onWindowResize() {
@@ -159,16 +125,22 @@ function onWindowResize() {
 
 }
 
+function update () {
+
+	
+	setTimeout( update, 16 ); // update logic a little faster than 60fps
+	ocean.scroll( camera.position );
+	player.update( 16 );
+
+}
+
 function animate() {
 
 	requestAnimationFrame(animate);
 	// if ( animation ) {
 		// THREE.AnimationHandler.update( .4 );
-		//just for fun!
-		// toonMesh.position.y = boat.position.y + 480;
-		// toonMesh.lookAt( new THREE.Vector3( camera.position.x - toonMesh.position.x, toonMesh.position.y, camera.position.z - toonMesh.position.z ) );
 	// }
-	player.update( clock.getDelta() );
+	// player.update( clock.getDelta() );
 	render();
 	render_stats.update();
 	
@@ -177,9 +149,7 @@ function animate() {
 function render() {
 
 	var delta = clock.getDelta();
-	// controls.update( delta );	
-	
-	ocean.scroll( camera.position );
+		
 	ocean.animate( delta );
 	skybox.animate( delta );
 	skybox.render();

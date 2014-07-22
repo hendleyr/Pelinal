@@ -15,6 +15,12 @@ PELINAL.ShaderLib = {
 	Ocean : {
 		vertexShader:
 		[
+			//attribute vec3 position;		// typical attributes done for us by three.js
+			//attribute mat4 modelMatrix;
+			//attribute mat4 modelViewMatrix
+			//attribute mat4 projectionMatrix
+			//attribute mat3 normalMatrix
+			//attribute vec3 normal;
 			"uniform vec2 rephase;",
 			"uniform float amplitude;",
 			"uniform float frequency;",
@@ -43,7 +49,6 @@ PELINAL.ShaderLib = {
 			"	vec4 mvPosition = modelViewMatrix * vec4( position.x, wavePosition.y, position.z, 1.0 );",
 			"	gl_Position = projectionMatrix * mvPosition;",
 			"	vViewPosition = -mvPosition.xyz;",
-			
 
 			"	#if MAX_SPOT_LIGHTS > 0",
 					"vWorldPosition = worldPosition.xyz;",
@@ -87,9 +92,13 @@ PELINAL.ShaderLib = {
 			"#endif",
 			"varying vec3 vViewPosition;",
 			"varying vec3 vNormal;",
-
-			"uniform float time;",
+			
+			"uniform vec3 fogColor;",	// fog
+			"uniform float fogDensity;",
+			
+			"uniform float time;",			// ocean uniforms
 			"uniform sampler2D map;",
+
 			"varying vec2 vUv;",
 
 			"void main() {",
@@ -228,9 +237,17 @@ PELINAL.ShaderLib = {
 			"	#if MAX_SPOT_LIGHTS > 0",
 			"		totalDiffuse += spotDiffuse;",
 			"		totalSpecular += spotSpecular;",
-			"	#endif",			
-			"	totalDiffuse = floor( totalDiffuse * 10.0 ) * 0.1;",	// cel-shading. don't think i want this on ocean...
-			"		gl_FragColor.xyz = gl_FragColor.xyz * ( emissive + totalDiffuse + ambientLightColor * ambient + totalSpecular );",
+			"	#endif",
+			
+			"	totalDiffuse = floor( totalDiffuse * 5.0 ) / 5.0;",		// cel-shading.
+			"	totalSpecular = floor( totalSpecular * 10.0 ) / 10.0;",	// cel-shading.
+			"	gl_FragColor.xyz = gl_FragColor.xyz * ( emissive + totalDiffuse + ambientLightColor * ambient + totalSpecular );",
+
+			"	float depth = gl_FragCoord.z / gl_FragCoord.w;",	// fog
+			"	const float LOG2 = 1.442695;",
+			"	float fogFactor = exp2( - fogDensity * fogDensity * depth * depth * LOG2 );",
+			"	fogFactor = 1.0 - clamp( fogFactor, 0.0, 1.0 );",
+			"	gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor );",
 			"}"
 		].join( "\n" )
 	},
@@ -243,9 +260,44 @@ PELINAL.ShaderLib = {
 			//attribute mat4 projectionMatrix
 			//attribute mat3 normalMatrix
 			//attribute vec3 normal;
+			"uniform vec3 diffuse;",
+			"uniform float opacity;",
+			"uniform vec3 ambient;",
+			"uniform vec3 emissive;",
+			"uniform vec3 specular;",
+			"uniform float shininess;",
+			"uniform vec3 ambientLightColor;",
+			"#if MAX_DIR_LIGHTS > 0",
+			"	uniform vec3 directionalLightColor[ MAX_DIR_LIGHTS ];",
+			"	uniform vec3 directionalLightDirection[ MAX_DIR_LIGHTS ];",
+			"#endif",
+			"#if MAX_HEMI_LIGHTS > 0",
+			"	uniform vec3 hemisphereLightSkyColor[ MAX_HEMI_LIGHTS ];",
+			"	uniform vec3 hemisphereLightGroundColor[ MAX_HEMI_LIGHTS ];",
+			"	uniform vec3 hemisphereLightDirection[ MAX_HEMI_LIGHTS ];",
+			"#endif",
+			"#if MAX_POINT_LIGHTS > 0",
+			"	uniform vec3 pointLightColor[ MAX_POINT_LIGHTS ];",
+			"	uniform vec3 pointLightPosition[ MAX_POINT_LIGHTS ];",
+			"	uniform float pointLightDistance[ MAX_POINT_LIGHTS ];",
+			"#endif",
+			"#if MAX_SPOT_LIGHTS > 0",
+			"	uniform vec3 spotLightColor[ MAX_SPOT_LIGHTS ];",
+			"	uniform vec3 spotLightPosition[ MAX_SPOT_LIGHTS ];",
+			"	uniform vec3 spotLightDirection[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightAngleCos[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightExponent[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightDistance[ MAX_SPOT_LIGHTS ];",
+			"#endif",
+			"#if MAX_SPOT_LIGHTS > 0",
+			"	varying vec3 vWorldPosition;",
+			"#endif",
+			"varying vec3 vLightFront;",
+			
 			"uniform sampler2D cliffMap;",
 			"uniform sampler2D sandMap;",
 			"uniform sampler2D grassMap;",
+			
 			"varying vec3 vNormal;",
 			"varying vec3 vViewPosition;",
 			"varying vec3 vWorldPosition;",
@@ -259,13 +311,102 @@ PELINAL.ShaderLib = {
 			"	vViewPosition = -1.0 * vec3( position );",			
 
 			"	vWorldPosition = worldPosition.xyz;",
+			
+			//lambert lighting
+			"	vLightFront = vec3( 0.0 );",
+			"	vec3 transformedNormal = normalMatrix * normal;",
+			"	transformedNormal = normalize( transformedNormal );",
+			"	#if MAX_DIR_LIGHTS > 0",
+			"	for( int i = 0; i < MAX_DIR_LIGHTS; i ++ ) {",
+			"		vec4 lDirection = viewMatrix * vec4( directionalLightDirection[ i ], 0.0 );",
+			"		vec3 dirVector = normalize( lDirection.xyz );",
+			"		float dotProduct = dot( transformedNormal, dirVector );",
+			"		vec3 directionalLightWeighting = vec3( max( dotProduct, 0.0 ) );",
+			"		vLightFront += directionalLightColor[ i ] * directionalLightWeighting;",
+			"	}",
+			"	#endif",
+			"	#if MAX_POINT_LIGHTS > 0",
+			"		for( int i = 0; i < MAX_POINT_LIGHTS; i ++ ) {",
+			"			vec4 lPosition = viewMatrix * vec4( pointLightPosition[ i ], 1.0 );",
+			"			vec3 lVector = lPosition.xyz - mvPosition.xyz;",
+			"			float lDistance = 1.0;",
+			"			if ( pointLightDistance[ i ] > 0.0 )",
+			"				lDistance = 1.0 - min( ( length( lVector ) / pointLightDistance[ i ] ), 1.0 );",
+			"			lVector = normalize( lVector );",
+			"			float dotProduct = dot( transformedNormal, lVector );",
+			"			vec3 pointLightWeighting = vec3( max( dotProduct, 0.0 ) );",
+			"			vLightFront += pointLightColor[ i ] * pointLightWeighting * lDistance;",
+			"	}",
+			"#endif",
+			"#if MAX_SPOT_LIGHTS > 0",
+			"	for( int i = 0; i < MAX_SPOT_LIGHTS; i ++ ) {",
+			"		vec4 lPosition = viewMatrix * vec4( spotLightPosition[ i ], 1.0 );",
+			"		vec3 lVector = lPosition.xyz - mvPosition.xyz;",
+			"		float spotEffect = dot( spotLightDirection[ i ], normalize( spotLightPosition[ i ] - worldPosition.xyz ) );",
+			"		if ( spotEffect > spotLightAngleCos[ i ] ) {",
+			"			spotEffect = max( pow( spotEffect, spotLightExponent[ i ] ), 0.0 );",
+			"			float lDistance = 1.0;",
+			"			if ( spotLightDistance[ i ] > 0.0 )",
+			"				lDistance = 1.0 - min( ( length( lVector ) / spotLightDistance[ i ] ), 1.0 );",
+			"			lVector = normalize( lVector );",
+			"			float dotProduct = dot( transformedNormal, lVector );",
+			"			vec3 spotLightWeighting = vec3( max( dotProduct, 0.0 ) );",
+			"			vLightFront += spotLightColor[ i ] * spotLightWeighting * lDistance * spotEffect;",
+			"		}",
+			"	}",
+			"#endif",
+			"	#if MAX_HEMI_LIGHTS > 0",
+			"		for( int i = 0; i < MAX_HEMI_LIGHTS; i ++ ) {",
+			"			vec4 lDirection = viewMatrix * vec4( hemisphereLightDirection[ i ], 0.0 );",
+			"			vec3 lVector = normalize( lDirection.xyz );",
+			"			float dotProduct = dot( transformedNormal, lVector );",
+			"			float hemiDiffuseWeight = 0.5 * dotProduct + 0.5;",
+			"			float hemiDiffuseWeightBack = -0.5 * dotProduct + 0.5;",
+			"			vLightFront += mix( hemisphereLightGroundColor[ i ], hemisphereLightSkyColor[ i ], hemiDiffuseWeight );",
+			"		}",
+				"#endif",
+			"	vLightFront = vLightFront * diffuse + ambient * ambientLightColor + emissive;",
 			"}"
 		].join( "\n" ),
 		fragmentShader:
 		[
+			"uniform vec3 ambient;",
+			"uniform vec3 diffuse;",
+			"uniform vec3 emissive;",
+			"uniform vec3 ambientLightColor;",
+			"#if MAX_DIR_LIGHTS > 0",
+			"	uniform vec3 directionalLightColor[ MAX_DIR_LIGHTS ];",
+			"	uniform vec3 directionalLightDirection[ MAX_DIR_LIGHTS ];",
+			"#endif",
+			"#if MAX_HEMI_LIGHTS > 0",
+			"	uniform vec3 hemisphereLightSkyColor[ MAX_HEMI_LIGHTS ];",
+			"	uniform vec3 hemisphereLightGroundColor[ MAX_HEMI_LIGHTS ];",
+			"	uniform vec3 hemisphereLightDirection[ MAX_HEMI_LIGHTS ];",
+			"#endif",
+			"#if MAX_POINT_LIGHTS > 0",
+			"	uniform vec3 pointLightColor[ MAX_POINT_LIGHTS ];",
+			"	uniform vec3 pointLightPosition[ MAX_POINT_LIGHTS ];",
+			"	uniform float pointLightDistance[ MAX_POINT_LIGHTS ];",
+			"#endif",
+			"#if MAX_SPOT_LIGHTS > 0",
+			"	uniform vec3 spotLightColor[ MAX_SPOT_LIGHTS ];",
+			"	uniform vec3 spotLightPosition[ MAX_SPOT_LIGHTS ];",
+			"	uniform vec3 spotLightDirection[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightDistance[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightAngleCos[ MAX_SPOT_LIGHTS ];",
+			"	uniform float spotLightExponent[ MAX_SPOT_LIGHTS ];",
+			"#endif",
+			"#ifdef WRAP_AROUND",
+			"	uniform vec3 wrapRGB;",
+			"#endif",
+			"varying vec3 vLightFront;",
+		
 			"uniform sampler2D cliffMap;",
 			"uniform sampler2D sandMap;",
 			"uniform sampler2D grassMap;",
+			"uniform vec3 fogColor;",
+			"uniform float fogDensity;",
+			
 			"varying vec3 vNormal;",
 			"varying vec3 vViewPosition;",
 			"varying vec3 vWorldPosition;",
@@ -288,6 +429,14 @@ PELINAL.ShaderLib = {
 			"	gl_FragColor = ( trip.x * texture2D( cliffMap, yz ) )",
 			"		+ ( mix( trip.y * texture2D( sandMap, xz ), trip.y * texture2D( grassMap, xz ), min( 1.0, vWorldPosition.y / 2400.0 ) ) );",	// todo; this fades from sand to grass as you go up. want something more generalizable/looks better
 			"		+ ( trip.z * texture2D( cliffMap, xy ) );",
+			"	gl_FragColor.xyz *= ceil( vLightFront * 2.0) / 2.0;",
+			
+			"	float depth = gl_FragCoord.z / gl_FragCoord.w;",	// fog
+			"	const float LOG2 = 1.442695;",
+			"	float fogFactor = exp2( - fogDensity * fogDensity * depth * depth * LOG2 );",
+			"	fogFactor = 1.0 - clamp( fogFactor, 0.0, 1.0 );",
+			"	gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor );",
+			
 			"}"
 		].join( "\n" )
 	}
