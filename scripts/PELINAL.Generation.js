@@ -161,11 +161,11 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 		diffuse: { type: "c", value: new THREE.Color( 0xffffff ) },
 		// opacity: { type: "f", value: 1.0 },
 		ambient: { type: "c", value: new THREE.Color( 0xffffff ) },
-		emissive: { type: "c", value: new THREE.Color( 0x000000 ) },
-		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
+		emissive: { type: "c", value: new THREE.Color( 0x000 ) },
+		specular: { type: "c", value: new THREE.Color( 0x000 ) },
 		shininess: { type: "f", value: 5 },
-		fogColor: { type: "c", value: new THREE.Color( 0xffffff ) },
-		fogDensity: { type: "f", value: 0.0000025 }
+		fogColor: { type: "c", value: new THREE.Color( 0xD1DCFF ) },
+		fogDensity: { type: "f", value: 0.00003 }
 	 } ] );
 	this._uniforms.cliffMap = { type: "t", value: this._cliffTexture };	//workaround for texture id lost in uniforms merge
 	this._uniforms.sandMap = { type: "t", value: this._sandTexture };	//workaround for texture id lost in uniforms merge
@@ -202,7 +202,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	this._geometry = new THREE.PlaneGeometry( landmassX, _landmassZ, _detail - 1, _detail - 1 );	
 	this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
 	
-	var voronoiHeightMap = this._generateVoronoi( _detail, _siteCount );
+	var voronoiHeightMap = this._generateVoronoi( _detail, _siteCount );	// todo: we want to reject any voronoi cell that touches the neighbourhood boundary
 	var perlinHeightMap = this._generatePerlin( _detail, _perlinFrequencies );
 	
 	// combine heightmaps
@@ -213,11 +213,11 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	}
 	this._normalizeHeightMap( combinedHeightMap );
 	//todo: erosion
-	// this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
+	this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
 	this._tuckHeightMap( combinedHeightMap, _detail, 60 );
 	// this._convoluteHeightMap( combinedHeightMap, _detail, 0.25 ); //todo: my convolution filter sucks	
 	
-	var vertices = this._geometry.vertices.length; var fk = [];
+	var vertices = this._geometry.vertices.length;
 	for ( var k = 0; k < vertices; ++k ) {
 		this._geometry.vertices[k].y = 10000 * combinedHeightMap[k];
 		
@@ -254,20 +254,6 @@ PELINAL.Landmass.prototype = {
 	_perlin: null, _diagram: null,
 	_mesh: null, _geometry: null, position: null,
 	_material: null, _uniforms: null, _cliffTexture: null, _sandTexture: null,
-	
-	fnFixPhysijs: function () {
-	
-		for ( var i = 0; i < this._geometry.length; ++i ) {
-	
-			var temp = this._geometry.vertices[i].y;
-			this._geometry.vertices[i].y = this._geometry.vertices[i].z;
-			this._geometry.vertices[i].z = temp;
-		
-		}
-		this._geometry.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
-		this._geometry.verticesNeedUpdate = true;
-	
-	},
 	
 	// octree: null,
 	

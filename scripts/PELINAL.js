@@ -112,7 +112,7 @@ PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 	this.position = this._physicsMesh.position;
 	
 	scene.add( this._physicsMesh );
-	this._physicsMesh.mass = 100;
+	this._physicsMesh.mass = this._mass;
 	this._physicsMesh.setAngularFactor( { x: 0, y: 1, z: 0 } );
 	
 	// PLAYER MODEL
@@ -134,7 +134,8 @@ PELINAL.Player.prototype = {
 	position: new THREE.Vector3(),
 	moveSpeed: 9200,
 	_physicsMesh: null,
-	_mesh: null, _animations: [], _isLoaded: false,
+	_mass: 100,
+	_mesh: null, _isLoaded: false,
 	_scene: null,
 	_camera: null,
 	_cameraControls: null, _playerControls: null,
@@ -144,8 +145,11 @@ PELINAL.Player.prototype = {
 	_impulse: 2000,
 	_jumpImpulse: 16000,
 	// _octree: null,
-	
+	/*		//	ANIMATIONS	-- looks like these are exported alphabetically!	*/
+	_backDodgeAnim: null, _bowAnim: null, _jumpAnim: null, _saluteAnim: null, _sprintAnim: null, _swordMoves1Anim: null, _waveAnim: null,
+	/*		\\	ANIMATIONS																				*/
 	_loaded: false,
+	
 	_load: function ( geometry, materials ) {
 
 		// MESH
@@ -162,12 +166,46 @@ PELINAL.Player.prototype = {
 			var mat = materials[i];
 			mat.skinning = true;
 		}
+		
+		for ( var i = 0; i < geometry.animations.length; ++i ) {
+			THREE.AnimationHandler.add( geometry.animations[i] );
+		}
+		this._configAnimations();
+		
 		this._loaded = true;
 		this._scene.simulate();
-		// THREE.AnimationHandler.add( mesh.geometry.animations[0] );
-		// THREE.AnimationHandler.add( mesh.geometry.animations[1] );
-		// animation = new THREE.Animation( toonMesh, 'SwordMoves1', THREE.AnimationHandler.CATMULLROM );
-		// var waveAnimation = new THREE.Animation( toonMesh, 'toonAnimation', THREE.AnimationHandler.CATMULLROM );
+		
+	},
+	
+	_configAnimations: function () {
+		
+		this._backDodgeAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[0].name, THREE.AnimationHandler.CATMULLROM );
+		this._backDodgeAnim.loop = false;
+		this._backDodgeAnim.timeScale = 40;
+		
+		this._bowAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[1].name, THREE.AnimationHandler.CATMULLROM );
+		this._bowAnim.loop = false;
+		this._bowAnim.timeScale = 40;
+		
+		this._jumpAnim = new THREE.Animation( this._mesh, "Jump", THREE.AnimationHandler.CATMULLROM );
+		this._jumpAnim.loop = false;
+		this._jumpAnim.timeScale = 40;
+		
+		this._saluteAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[3].name, THREE.AnimationHandler.CATMULLROM );
+		this._saluteAnim.loop = false;
+		this._saluteAnim.timeScale = 40;
+		
+		this._sprintAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[4].name, THREE.AnimationHandler.CATMULLROM );
+		this._sprintAnim.loop = true;
+		this._sprintAnim.timeScale = 40;
+		
+		this._swordMoves1Anim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[5].name, THREE.AnimationHandler.CATMULLROM );
+		this._swordMoves1Anim.loop = false;
+		this._swordMoves1Anim.timeScale = 40;
+		
+		this._waveAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[6].name, THREE.AnimationHandler.CATMULLROM );
+		this._waveAnim.loop = false;
+		this._waveAnim.timeScale = 40;
 		
 	},
 	
@@ -176,6 +214,12 @@ PELINAL.Player.prototype = {
 		// this._octree = octree;
 	
 	// },
+	
+	animate: function ( delta ) {
+	
+		THREE.AnimationHandler.update( delta );
+	
+	},
 	
 	update: function ( delta ) {
 		if ( !this._loaded ) { return; }
@@ -195,12 +239,19 @@ PELINAL.Player.prototype = {
 			this._physicsMesh.applyCentralImpulse( new THREE.Vector3().crossVectors( this._camera.up,  this._cameraControls._lookVector ).normalize().multiplyScalar( this._impulse ), { x:0, y:0, z:0 } );
 		}
 		
-		//todo: jumping; damp impulses if in air
 		if ( this._playerControls.jump ) {
 			if ( this._physicsMesh._physijs.touches[0] ) {
 				// is touching the ground (or at least one thing), so we can jump
 				this._physicsMesh.applyCentralImpulse( new THREE.Vector3( 0, 1, 0).multiplyScalar( this._jumpImpulse ), { x:0, y:0, z:0 } );
+				this._jumpAnim.play( 5 );	// todo: need logic for blending into animation
 			}
+		}
+		
+		if ( this._playerControls.bow ) {
+			this._bowAnim.play();
+		}
+		if ( this._playerControls.wave ) {
+			this._waveAnim.play();
 		}
 		
 		if ( 		!this._playerControls.moveForward 
@@ -247,13 +298,15 @@ PELINAL.KeyboardControls.prototype = {
 	_rightKey: 68,			// d
 	_jumpKey: 32,			// space
 	moveForward: false, moveBackWard: false, moveLeft: false, moveRight: false, jump: false,
+	bow: false, wave: false,
 	
 	update: function ( delta ) {	},
 	enable: function () { this._isEnabled = true; },
 	disable: function () { this._isEnabled = false; },
 	
 	onKeyDown: function ( event ) {
-		
+	
+		console.log( event.keyCode );		
 		if ( this._isEnabled === false ) { return; }
 		switch ( event.keyCode ) {
 
@@ -275,6 +328,14 @@ PELINAL.KeyboardControls.prototype = {
 				
 			case this._jumpKey:
 				this.jump = true;
+				break;
+				
+			case 82:
+				this.wave = true;
+				break;
+				
+			case 70:
+				this.bow = true;
 				break;
 
 		}
@@ -303,6 +364,14 @@ PELINAL.KeyboardControls.prototype = {
 				
 			case this._jumpKey:
 				this.jump = false;
+				break;
+				
+			case 82:
+				this.wave = false;
+				break;
+				
+			case 70:
+				this.bow = false;
 				break;
 
 		}
@@ -695,8 +764,8 @@ PELINAL.Ocean = function ( renderer, camera, amplitude, frequency, texturePath )
 		emissive: { type: "c", value: new THREE.Color( 0x000000 ) },
 		specular: { type: "c", value: new THREE.Color( 0xffffff ) },
 		shininess: { type: "f", value: 5 },
-		fogColor: { type: "c", value: new THREE.Color( 0xffffff ) },
-		fogDensity: { type: "f", value: 0.0000025 }
+		fogColor: { type: "c", value: new THREE.Color( 0xD1DCFF ) },
+		fogDensity: { type: "f", value: 0.00000 }
 	 } ] );
 	this._uniforms.map = { type: "t", value: this._texture };	//workaround for texture id lost in uniforms merge
 

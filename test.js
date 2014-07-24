@@ -28,7 +28,7 @@ var mesh, texture;
 var boat;
 var player;
 var skybox, ocean;
-var directionalLight;
+var directionalLight, ambientLight;
 
 var clock = new THREE.Clock( true );
 var animation, toonMesh;
@@ -40,7 +40,8 @@ animate();
 function init() {
 	
 	renderer = new THREE.WebGLRenderer( { clearAlpha: 1 } );
-	//renderer.setClearColor( 0x42b2da );
+	// renderer.setClearColor( 0xffffff );
+	// renderer.setClearColor( 0x42b2da );
 	renderer.setClearColor( 0x18406b );
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.autoClear = false;
@@ -68,21 +69,19 @@ function init() {
 			phys_stats.update();
 		}
 	);
-	scene.fog = new THREE.FogExp2( 0xffffff, 0.00025 );
+	scene.fog = new THREE.FogExp2( 0x18406b, 0.00001 );
 	
 	player = new PELINAL.Player( scene, camera, null, new THREE.Vector3( 0, 3500, 0 ) );
 		
 	menu = new PELINAL.Menu( 'blocker', 'instructions', player._cameraControls );
 
-	var ambientLight = new THREE.AmbientLight( 0x202020 ); // soft white light
+	ambientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
 	scene.add( ambientLight );
 	
-	directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
+	directionalLight = new THREE.DirectionalLight( 0xffffaa, 1.0 );
 	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
 	scene.add( directionalLight );
-	
-	var light = new THREE.AmbientLight( 0x404040 ); // soft white light
-	scene.add( light );
+
 	//sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );	
 	
 	texture = THREE.ImageUtils.loadTexture( "textures/sand.png" );
@@ -137,19 +136,17 @@ function update () {
 function animate() {
 
 	requestAnimationFrame(animate);
-	// if ( animation ) {
-		// THREE.AnimationHandler.update( .4 );
-	// }
-	// player.update( clock.getDelta() );
-	render();
+	var delta = clock.getDelta();
+	THREE.AnimationHandler.update( delta );
+	
+	// player.update(  );
+	render( delta );
 	render_stats.update();
 	
 }
 
-function render() {
+function render( delta ) {
 
-	var delta = clock.getDelta();
-		
 	ocean.animate( delta );
 	skybox.animate( delta );
 	skybox.render();

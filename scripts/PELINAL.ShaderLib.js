@@ -240,7 +240,7 @@ PELINAL.ShaderLib = {
 			"	#endif",
 			
 			"	totalDiffuse = floor( totalDiffuse * 5.0 ) / 5.0;",		// cel-shading.
-			"	totalSpecular = floor( totalSpecular * 10.0 ) / 10.0;",	// cel-shading.
+			// "	totalSpecular = floor( totalSpecular * 10.0 ) / 10.0;",	// cel-shading.
 			"	gl_FragColor.xyz = gl_FragColor.xyz * ( emissive + totalDiffuse + ambientLightColor * ambient + totalSpecular );",
 
 			"	float depth = gl_FragCoord.z / gl_FragCoord.w;",	// fog
@@ -322,6 +322,7 @@ PELINAL.ShaderLib = {
 			"		vec3 dirVector = normalize( lDirection.xyz );",
 			"		float dotProduct = dot( transformedNormal, dirVector );",
 			"		vec3 directionalLightWeighting = vec3( max( dotProduct, 0.0 ) );",
+			"		directionalLightWeighting = ceil( directionalLightWeighting * 4.0 ) / 4.0;",	// fakey cel shade in vertex shader
 			"		vLightFront += directionalLightColor[ i ] * directionalLightWeighting;",
 			"	}",
 			"	#endif",
@@ -396,9 +397,6 @@ PELINAL.ShaderLib = {
 			"	uniform float spotLightAngleCos[ MAX_SPOT_LIGHTS ];",
 			"	uniform float spotLightExponent[ MAX_SPOT_LIGHTS ];",
 			"#endif",
-			"#ifdef WRAP_AROUND",
-			"	uniform vec3 wrapRGB;",
-			"#endif",
 			"varying vec3 vLightFront;",
 		
 			"uniform sampler2D cliffMap;",
@@ -429,7 +427,16 @@ PELINAL.ShaderLib = {
 			"	gl_FragColor = ( trip.x * texture2D( cliffMap, yz ) )",
 			"		+ ( mix( trip.y * texture2D( sandMap, xz ), trip.y * texture2D( grassMap, xz ), min( 1.0, vWorldPosition.y / 2400.0 ) ) );",	// todo; this fades from sand to grass as you go up. want something more generalizable/looks better
 			"		+ ( trip.z * texture2D( cliffMap, xy ) );",
-			"	gl_FragColor.xyz *= ceil( vLightFront * 2.0) / 2.0;",
+			// "	gl_FragColor.xyz *= ceil( vLightFront * 2.0) / 2.0;",	// simple cell shade
+			"gl_FragColor.xyz *= vLightFront;",
+			// "float intensity = smoothstep( - 0.5, 1.0, pow( length(vLightFront), 20.0 ) );",
+			// "	intensity += length(vLightFront) * 0.2;",
+			// "	intensity = intensity * 0.2 + 0.3;",
+			// "	if ( intensity < 0.50 ) {",
+			// "		gl_FragColor = vec4( 2.0 * intensity * gl_FragColor.xyz, 1.0 );",
+			// "	} else {",
+			// "	gl_FragColor = vec4( 1.0 - 2.0 * ( 1.0 - intensity ) * ( 1.0 - gl_FragColor.xyz ), 1.0 );",
+			// "}",
 			
 			"	float depth = gl_FragCoord.z / gl_FragCoord.w;",	// fog
 			"	const float LOG2 = 1.442695;",
