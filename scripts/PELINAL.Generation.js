@@ -191,7 +191,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	);
 
 	// ad hoc tweakabe settings
-	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
+	var _detail = 256; var landmassX = 33690; var _landmassZ = 33690;
 	var _siteCount = 10;
 	var _perlinFrequencies = [ 2, 4, 8 ];
 	var _stepArity = 2;
@@ -213,7 +213,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	}
 	this._normalizeHeightMap( combinedHeightMap );
 	//todo: erosion
-	this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
+	// this._stepWiseClampHeightMap( combinedHeightMap, _stepArity );
 	this._tuckHeightMap( combinedHeightMap, _detail, 60 );
 	// this._convoluteHeightMap( combinedHeightMap, _detail, 0.25 ); //todo: my convolution filter sucks	
 	

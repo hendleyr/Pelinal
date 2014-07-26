@@ -95,19 +95,22 @@ PELINAL.Menu.prototype = {
 PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 
 	// MISC
-	var cap1 = new THREE.SphereGeometry( 25, 8, 8 );
-	cap1.applyMatrix( new THREE.Matrix4().makeTranslation( 0, 50, 0 ) );
-	var cap2 = new THREE.SphereGeometry( 25, 8, 8 );
-	cap2.applyMatrix( new THREE.Matrix4().makeTranslation( 0, -50, 0 ) );
-	var capsule = new THREE.CylinderGeometry( 25, 25, 50, 8, 1, true );
+	var cap1 = new THREE.SphereGeometry( 0.5, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2 );
+	cap1.applyMatrix( new THREE.Matrix4().makeTranslation( 0, 0.5, 0 ) );
+	var cap2 = new THREE.SphereGeometry( 0.5, 8, 8, 0, Math.PI * 2, -Math.PI, Math.PI / 2 );
+	cap2.applyMatrix( new THREE.Matrix4().makeTranslation( 0, -0.5, 0 ) );
+	var capsule = new THREE.CylinderGeometry( 0.5, 0.5, 1, 8, 1, true );
 	capsule.merge( cap1 );
 	capsule.merge( cap2 );
 	this._physicsMesh = new Physijs.CapsuleMesh(
 		capsule,
-		new THREE.MeshLambertMaterial()
+		new THREE.MeshLambertMaterial({ wireframe: true })
 	);
 
 	this._physicsMesh.position = pos;
+	
+	
+	
 	this._physicsMesh.__dirtyPosition = true;
 	this.position = this._physicsMesh.position;
 	
@@ -132,18 +135,17 @@ PELINAL.Player.prototype = {
 
 	constructor: PELINAL.Player,
 	position: new THREE.Vector3(),
-	moveSpeed: 9200,
 	_physicsMesh: null,
-	_mass: 100,
+	_mass: 75,
 	_mesh: null, _isLoaded: false,
 	_scene: null,
 	_camera: null,
 	_cameraControls: null, _playerControls: null,
 	_velocity: new THREE.Vector3(),
 	_friction: 10,
-	_maxSpeed: 500,	// we want to do this in a physics tick callback
-	_impulse: 2000,
-	_jumpImpulse: 16000,
+	_maxSpeed: 15,	// we want to do this in a physics tick callback
+	_impulse: 10,
+	_jumpImpulse: 16,
 	// _octree: null,
 	/*		//	ANIMATIONS	-- looks like these are exported alphabetically!	*/
 	_backDodgeAnim: null, _bowAnim: null, _jumpAnim: null, _saluteAnim: null, _sprintAnim: null, _swordMoves1Anim: null, _waveAnim: null,
@@ -154,8 +156,7 @@ PELINAL.Player.prototype = {
 
 		// MESH
 		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
-		this._mesh.position.y = -65;// todo: refit model coordinates?
-		// this._mesh.position = this._physicsMesh.position;
+		this._mesh.position.y = -1;// model coords origin at feet; this will center model inside capsule
 		this._scene.add( this._mesh );
 		this._physicsMesh.add( this._mesh );
 		
@@ -225,8 +226,12 @@ PELINAL.Player.prototype = {
 		if ( !this._loaded ) { return; }
 	
 		if ( this._playerControls.moveForward ) {
-			// todo gradually redirect momentum to match look vector
 			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( -this._impulse ), { x:0, y:0, z:0 } );
+			// todo gradually redirect momentum to match look vector
+			
+			// rotate mesh gradually to match look vector to 
+			this._mesh.quaternion.slerp( this._cameraControls._quat, delta / 200 );
+			
 		}
 		if ( this._playerControls.moveBackWard ) {
 			// todo gradually redirect momentum to match look vector
@@ -405,7 +410,7 @@ PELINAL.OrbitCameraControls.prototype = {
 	_xSensitivity: -0.002, _ySensitivity: -0.002,
 	_pitch: 0, _minPitch: Math.PI / 16, _maxPitch: Math.PI - Math.PI / 16, _pitchDelta: 0,
 	_yaw: 0, _yawDelta: 0,
-	_zoom: 10, _offsetMin: 800, _offsetMax: 1000,
+	_zoom: 10, _offsetMin: 3, _offsetMax: 10,
 	
 	update: function () {
 	
@@ -414,7 +419,8 @@ PELINAL.OrbitCameraControls.prototype = {
 		// find camera's offset from target
 		this._offset.subVectors( this._camera.position, this._target );
 		this._lookVector = this._lookVector.copy( this._offset ).normalize(); //.multiplyScalar( -1 )
-		this._offset.applyQuaternion( this._quat );
+		this._quat.setFromAxisAngle( this._camera.up, this._yaw + Math.PI );
+		// this._offset.applyQuaternion( this._quat );
 		
 		this._yaw = Math.atan2( this._offset.x, this._offset.z );
 		this._pitch = Math.atan2( Math.sqrt( this._offset.x * this._offset.x + this._offset.z * this._offset.z ), this._offset.y );
@@ -432,7 +438,7 @@ PELINAL.OrbitCameraControls.prototype = {
 		this._offset.y = offsetRadius * Math.cos( this._pitch );
 		this._offset.z = offsetRadius * Math.sin( this._pitch ) * Math.cos( this._yaw );
 		
-		this._offset.applyQuaternion( this._quatInverse );
+		// this._offset.applyQuaternion( this._quatInverse );
 		this._camera.position.addVectors( this._offset, this._target );
 		
 		this._camera.lookAt( this._target );

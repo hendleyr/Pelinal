@@ -61,7 +61,7 @@ function init() {
 	camera.position.z = 500;
 
 	scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });	//new THREE.Scene();	
-	scene.setGravity(new THREE.Vector3( 0, -700, 0 ));
+	scene.setGravity(new THREE.Vector3( 0, -9.81, 0 ));
 	scene.addEventListener(
 		'update',
 		function() {
@@ -70,10 +70,6 @@ function init() {
 		}
 	);
 	scene.fog = new THREE.FogExp2( 0x18406b, 0.00001 );
-	
-	player = new PELINAL.Player( scene, camera, null, new THREE.Vector3( 0, 3500, 0 ) );
-		
-	menu = new PELINAL.Menu( 'blocker', 'instructions', player._cameraControls );
 
 	ambientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
 	scene.add( ambientLight );
@@ -81,14 +77,7 @@ function init() {
 	directionalLight = new THREE.DirectionalLight( 0xffffaa, 1.0 );
 	directionalLight.position = new THREE.Vector3( 15000, 15000, 0.0 );
 	scene.add( directionalLight );
-
 	//sunHelper = new THREE.DirectionalLightHelper( directionalLight, 500 );	
-	
-	texture = THREE.ImageUtils.loadTexture( "textures/sand.png" );
-	texture.wrapS = THREE.RepeatWrapping;
-	texture.wrapT = THREE.RepeatWrapping;
-	texture.repeat.set( 16, 16 );
-	texture.needsUpdate = true;
 
 	//SKYBOX and WATER
 	skybox = new PELINAL.SkyBox( renderer, camera, "textures/distantCloud.png", [ "textures/cloud1.png", "textures/cloud2.png", "textures/cloud3.png" ], 25, scene );
@@ -98,6 +87,12 @@ function init() {
 	//TEST LANDMASS
 	landmass = new PELINAL.Landmass( new THREE.Vector3( 0, 0, 0 ), "textures/cliffFace.png", "textures/stonyShore.png", "textures/grass.png", scene );
 	scene.add( landmass._mesh );
+	
+	var coord = Math.ceil( Math.random() * landmass._geometry.vertices.length );
+	
+	player = new PELINAL.Player( scene, camera, null, new THREE.Vector3( landmass._geometry.vertices[coord].x, landmass._geometry.vertices[coord].y + 1.5, landmass._geometry.vertices[coord].z ) );
+	menu = new PELINAL.Menu( 'blocker', 'instructions', player._cameraControls );	
+		
 	// player.setSceneGraph( landmass.octree );
 	
 	//BOAT
