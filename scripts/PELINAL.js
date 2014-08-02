@@ -104,19 +104,18 @@ PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 	capsule.merge( cap2 );
 	this._physicsMesh = new Physijs.CapsuleMesh(
 		capsule,
-		new THREE.MeshLambertMaterial({ wireframe: true })
+		Physijs.createMaterial( new THREE.MeshLambertMaterial( { wireframe: true } ) ),
+		//new THREE.MeshLambertMaterial({ wireframe: true })
+		this._mass
 	);
 
-	this._physicsMesh.position = pos;
-	
-	
-	
+	this._physicsMesh.position = pos;	
 	this._physicsMesh.__dirtyPosition = true;
 	this.position = this._physicsMesh.position;
 	
 	scene.add( this._physicsMesh );
 	this._physicsMesh.mass = this._mass;
-	this._physicsMesh.setAngularFactor( { x: 0, y: 1, z: 0 } );
+	// this._physicsMesh.setAngularFactor( { x: 0, y: 1, z: 0 } );
 	
 	// PLAYER MODEL
 	modelPath = modelPath || 'models/toon/toon.js';
@@ -126,7 +125,7 @@ PELINAL.Player = function ( scene, camera, modelPath, pos ) {
 	
 	// CONTROLS
 	//this._cameraControls = new PELINAL.FirstPersonCameraControls( this._camera );
-	this._cameraControls = new PELINAL.OrbitCameraControls( this._camera, this.position, document.body );
+	this._cameraControls = new PELINAL.OrbitCameraControls( this._camera, this.position, this, document.body, scene );
 	this._playerControls = new PELINAL.KeyboardControls();
 
 },
@@ -145,8 +144,8 @@ PELINAL.Player.prototype = {
 	_friction: 10,
 	_maxSpeed: 15,	// we want to do this in a physics tick callback
 	_impulse: 10,
-	_jumpImpulse: 16,
-	// _octree: null,
+	_jumpImpulse: 50,
+	_octree: null,
 	/*		//	ANIMATIONS	-- looks like these are exported alphabetically!	*/
 	_backDodgeAnim: null, _bowAnim: null, _jumpAnim: null, _saluteAnim: null, _sprintAnim: null, _swordMoves1Anim: null, _waveAnim: null,
 	/*		\\	ANIMATIONS																				*/
@@ -210,16 +209,15 @@ PELINAL.Player.prototype = {
 		
 	},
 	
-	// setSceneGraph: function ( octree ) {
+	setSceneGraph: function ( octree ) {
 	
-		// this._octree = octree;
+		this._octree = octree;
+		this._cameraControls._octree = octree;
 	
-	// },
+	},
 	
 	animate: function ( delta ) {
-	
-		THREE.AnimationHandler.update( delta );
-	
+		// everything currently handled by animation handler singleton
 	},
 	
 	update: function ( delta ) {
@@ -229,7 +227,7 @@ PELINAL.Player.prototype = {
 			this._physicsMesh.applyCentralImpulse( new THREE.Vector3( this._cameraControls._lookVector.x, 0, this._cameraControls._lookVector.z ).normalize().multiplyScalar( -this._impulse ), { x:0, y:0, z:0 } );
 			// todo gradually redirect momentum to match look vector
 			
-			// rotate mesh gradually to match look vector to 
+			// rotate mesh gradually to match look vector
 			this._mesh.quaternion.slerp( this._cameraControls._quat, delta / 200 );
 			
 		}
@@ -271,8 +269,9 @@ PELINAL.Player.prototype = {
 		else {
 			this._physicsMesh.setDamping( .25, .25 );	// todo: not sure about these values
 		}
+		
 		// todo: tweak orbit camera for more smoothness, check for camera collisions
-		this._cameraControls.update();
+		this._cameraControls.update( delta );		
 		
 	},
 	
@@ -311,7 +310,7 @@ PELINAL.KeyboardControls.prototype = {
 	
 	onKeyDown: function ( event ) {
 	
-		console.log( event.keyCode );		
+		// console.log( event.keyCode );		
 		if ( this._isEnabled === false ) { return; }
 		switch ( event.keyCode ) {
 
@@ -386,14 +385,31 @@ PELINAL.KeyboardControls.prototype = {
 },
 
 
-PELINAL.OrbitCameraControls = function ( camera, target, containerElement ) {
+PELINAL.OrbitCameraControls = function ( camera, target, player, containerElement, scene ) {
 
 	this._camera = camera;
+	this._scene = scene;
+	this._player = player;
+	
 	this._quat = new THREE.Quaternion().setFromUnitVectors( camera.up, new THREE.Vector3( 0, 1, 0 ) );
-	this._quatInverse = this._quat.clone().inverse();
 	this._target = target;
 	this._containerElement = containerElement;
 	this._isEnabled = false;
+	
+	this._cameraBody = new Physijs.SphereMesh(
+		new THREE.SphereGeometry(2),
+		Physijs.createMaterial( new THREE.MeshLambertMaterial( { wireframe: true, side: THREE.DoubleSide } ), 0, 1 ),
+		0.1
+	);
+	this._cameraBody.addEventListener( 'ready', this._cameraPhysicsSetup.bind( this ) );
+	this._cameraBody.mass = 1;
+	
+	// this._cameraBody.position = this._camera.position;
+	scene.add( this._cameraBody );
+	
+	this._cameraBody.position.copy( this._camera.position );
+	// this._cameraBody.position = this._camera.position;
+	scene.add( this._cameraBody );
 	
 	document.addEventListener( 'mousemove', this.onMouseMove.bind( this ), false );
 	document.addEventListener( 'mousewheel', this.onMouseWheel.bind( this ), false );
@@ -404,7 +420,16 @@ PELINAL.OrbitCameraControls = function ( camera, target, containerElement ) {
 PELINAL.OrbitCameraControls.prototype = {
 
 	constructor: PELINAL.OrbitCameraControls,
-	_camera: null, _target: new THREE.Vector3(), _offset: new THREE.Vector3(1, 0, 0), _lookVector: new THREE.Vector3( -1, 0, 0 ),
+	_player: null,
+	_camera: null, _cameraBody: null, 
+	_idealCamPlacement: new THREE.Vector3(), _placementImpulse: new THREE.Vector3(),
+	_target: new THREE.Vector3(),
+	
+	_offset: new THREE.Vector3( 1, 0, 0 ),  _slideIn: 0,
+	
+	_lookVector: new THREE.Vector3( -1, 0, 0 ),
+	_scene: null, _octree: null,
+	
 	_quat: null, _quatInverse: null,
 	_containerElement: null, _isEnabled: false,
 	_xSensitivity: -0.002, _ySensitivity: -0.002,
@@ -412,15 +437,44 @@ PELINAL.OrbitCameraControls.prototype = {
 	_yaw: 0, _yawDelta: 0,
 	_zoom: 10, _offsetMin: 3, _offsetMax: 10,
 	
-	update: function () {
-	
-		if ( this._isEnabled === false ) { return; }
+	_cameraPhysicsSetup: function ( a, b, c, d ) { 
+		this._cameraBody.setDamping( .9995, .9995 );
+		this._cameraBody.setPerObjectGravity( { x:0, y:0, z:0 } );
+		// this._cameraBody.setAngularFactor( { x:0, y:0, z:0 } );
+		this._cameraBody.setCcdMotionThreshold( 0.1 );
+		this._cameraBody.setCcdSweptSphereRadius( 0.5 );
 		
+		this._cameraBody.addEventListener( 'collision', function( other_object, relative_velocity, relative_rotation, contact_normal ) {
+			
+			// `this` has collided with `other_object` with an impact speed of `relative_velocity` and a rotational force of `relative_rotation` and at normal `contact_normal`
+			if ( other_object === this._player._physicsMesh ) { 
+				return false; 
+			}	else { 
+				this._slideIn += 0.1;
+			}
+			
+		}.bind( this ) );
+		
+		// this._cameraBody.setLinearFactor( { x:0, y:0, z:0 } );
+		this._cameraBody.position.copy( this._camera.position );
+		this._fixPlacement();
+		this._cameraBody.__dirtyPosition = true;
+	},
+	
+	update: function ( delta ) {
+	
+		// start sliding the camera back out if it's no longer pressed against something
+		if ( this._cameraBody._physijs.touches[0] != 1 ) { 
+			this._slideIn = Math.max( 0, this._slideIn - 0.1 );
+		}
+	
+		// calculate an intended destination for the camera
+		if ( this._isEnabled === false ) { return; }
+		this._cameraBody.setLinearVelocity( {x:0, y:0, z:0 } );
 		// find camera's offset from target
 		this._offset.subVectors( this._camera.position, this._target );
-		this._lookVector = this._lookVector.copy( this._offset ).normalize(); //.multiplyScalar( -1 )
+		this._lookVector = this._lookVector.copy( this._offset ).normalize();
 		this._quat.setFromAxisAngle( this._camera.up, this._yaw + Math.PI );
-		// this._offset.applyQuaternion( this._quat );
 		
 		this._yaw = Math.atan2( this._offset.x, this._offset.z );
 		this._pitch = Math.atan2( Math.sqrt( this._offset.x * this._offset.x + this._offset.z * this._offset.z ), this._offset.y );
@@ -431,20 +485,54 @@ PELINAL.OrbitCameraControls.prototype = {
 		// clamp pitch between our defined min and max angles
 		this._pitch = Math.max( this._minPitch, Math.min( this._maxPitch, this._pitch ) );
 				
-		var offsetRadius = this._offset.length(); //* this._zoom;
+		var offsetRadius = this._offset.length() - this._slideIn; //* this._zoom;
 		offsetRadius = Math.max( this._offsetMin, Math.min( this._offsetMax, offsetRadius ) );
 		
 		this._offset.x = offsetRadius * Math.sin( this._pitch ) * Math.sin( this._yaw );
 		this._offset.y = offsetRadius * Math.cos( this._pitch );
 		this._offset.z = offsetRadius * Math.sin( this._pitch ) * Math.cos( this._yaw );
+			
+		this._idealCamPlacement.addVectors( this._offset, this._target );
 		
-		// this._offset.applyQuaternion( this._quatInverse );
-		this._camera.position.addVectors( this._offset, this._target );
+		if ( this._placementFail ) {
+			this._fixPlacement();	//todo: failure conditions; send out a ray every X seconds and see if we can hit player
+		}
+		
+		// this._placementImpulse.subVectors( this._idealCamPlacement, this._camera.position ).multiplyScalar( 1 );
+		this._placementImpulse.subVectors( this._idealCamPlacement, this._cameraBody.position );
+		this._camera.position = this._idealCamPlacement;
+		// now nudge our camera body towards the ideal spot; nudge a lot if its far, nearly 0 if its near
+		var force = this._placementImpulse.lengthSq();
+		this._cameraBody.applyCentralImpulse( this._placementImpulse.normalize().multiplyScalar( force * 50 ) );
+		//this._camera.position = this._idealCamPlacement;
+		// this._cameraBody.position.lerp( this._idealCamPlacement, 0.25 );
+		// this._cameraBody.position.lerp( this._idealCamPlacement, 0.75 );
+		
+		// this._cameraBody.setLinearVelocity( this._placementImpulse.multiplyScalar( 100 ) );
+		// this._cameraBody.applyCentralForce( this._placementImpulse.normalize().multiplyScalar( 1000 ) );
+		
+		// this._cameraBody.position = this._idealCamPlacement;
+		this._camera.position.lerp( this._cameraBody.position, 0.5 );
+		// this._camera.position = this._cameraBody.position;
+		
+		// this._cameraBody.position.copy( this._camera.position );
+		// this._cameraBody.position = this._camera.position;
+		// this._cameraBody.__dirtyPosition = true;
 		
 		this._camera.lookAt( this._target );
 		this._yawDelta = 0;
 		this._pitchDelta = 0;
-				
+		
+	},
+	
+	_fixPlacement: function ( delta ) {
+		// it may be that sometimes our cam gets stuck behind something or fails otherise; this is a last resort
+		this._camera.position.set( this._target.x, this._target.y + this._offsetMin, this._target.z);
+		this._cameraBody.setAngularVelocity( { x:0, y:0, z:0 } );
+		this._cameraBody.setLinearVelocity( { x:0, y:0, z:0 } );
+		this._cameraBody.position.copy( this._camera.position );
+		// this._cameraBody.position = this._camera.position;
+		this._cameraBody.__dirtyPosition = true;
 	},
 	
 	onMouseMove: function ( event ) {

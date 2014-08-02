@@ -984,6 +984,13 @@ window.Physijs = (function() {
 			this.world.execute( 'updateMass', { id: this._physijs.id, mass: mass } );
 		}
 	});
+	
+		// Physijs.Mesh.setPerObjectGravity
+	Physijs.Mesh.prototype.setPerObjectGravity = function ( force ) {
+		if ( this.world ) {
+			this.world.execute( 'setPerObjectGravity', { id: this._physijs.id, x: force.x, y: force.y, z: force.z } );
+		}
+	};
 
 	// Physijs.Mesh.applyCentralImpulse
 	Physijs.Mesh.prototype.applyCentralImpulse = function ( force ) {

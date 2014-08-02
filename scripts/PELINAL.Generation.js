@@ -191,7 +191,7 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	);
 
 	// ad hoc tweakabe settings
-	var _detail = 256; var landmassX = 33690; var _landmassZ = 33690;
+	var _detail = 128; var landmassX = 33690; var _landmassZ = 33690;
 	var _siteCount = 10;
 	var _perlinFrequencies = [ 2, 4, 8 ];
 	var _stepArity = 2;
@@ -230,15 +230,15 @@ PELINAL.Landmass = function ( position, cliffTexturePath, sandTexturePath, grass
 	
 	this._geometry.computeFaceNormals();
 	this._geometry.computeVertexNormals();
-	this._mesh = new Physijs.HeightfieldMesh( this._geometry, this._material, 0 ); // mass 0
+	this._mesh = new Physijs.HeightfieldMesh( this._geometry, this._material, 0 ); // mass 0, immoveable
 	
 	// this.octree = new THREE.Octree({
 		// scene: scene,
 		// undeferred: true,
 		// set the max depth of tree
-		// depthMax: 4,
+		 // depthMax: 256,
 		// max number of objects before nodes split or merge
-		// objectsThreshold: 512,
+		// objectsThreshold: 8,
 		// percent between 0 and 1 that nodes will overlap each other
 		// helps insert objects that lie over more than one node
 		// overlapPct: 0.1
@@ -255,10 +255,10 @@ PELINAL.Landmass.prototype = {
 	_mesh: null, _geometry: null, position: null,
 	_material: null, _uniforms: null, _cliffTexture: null, _sandTexture: null,
 	
-	// octree: null,
+	octree: null,
 	
 	_quickDistance: function ( x, y, site ) {
-		
+		// just compare squares, we don't care that much
 		return Math.pow( x - site.x, 2 ) + Math.pow( y - site.y, 2 );
 		
 	},

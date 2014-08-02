@@ -58,9 +58,8 @@ function init() {
 	document.body.appendChild( phys_stats.domElement );
 
 	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 33690 );
-	camera.position.z = 500;
 
-	scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });	//new THREE.Scene();	
+	scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });
 	scene.setGravity(new THREE.Vector3( 0, -9.81, 0 ));
 	scene.addEventListener(
 		'update',
@@ -134,7 +133,6 @@ function animate() {
 	var delta = clock.getDelta();
 	THREE.AnimationHandler.update( delta );
 	
-	// player.update(  );
 	render( delta );
 	render_stats.update();
 	

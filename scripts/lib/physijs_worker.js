@@ -533,7 +533,7 @@ public_functions.updateTransform = function( details ) {
 	_object.activate();
 };
 
-public_functions.updateMass = function( details ) {
+public_functions.updateMass = function ( details ) {
 	// #TODO: changing a static object into dynamic is buggy
 	_object = _objects[details.id];
 	
@@ -547,6 +547,15 @@ public_functions.updateMass = function( details ) {
 	_object.setMassProps( details.mass, _vec3_1 );
 	world.addRigidBody( _object );
 	_object.activate();
+};
+
+public_functions.setPerObjectGravity = function ( details ) {
+	// hendleyr: change gravity for a single object, leaving world gravity unchanged
+	_vec3_1.setX( details.x );
+	_vec3_1.setY( details.y );
+	_vec3_1.setZ( details.z );
+	
+	_objects[details.id].setGravity( _vec3_1 );
 };
 
 public_functions.applyCentralImpulse = function ( details ) {

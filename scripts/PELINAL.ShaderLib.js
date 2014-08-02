@@ -422,7 +422,7 @@ PELINAL.ShaderLib = {
 			"	trip /= ( trip.x + trip.y + trip.z );",
 			
 			"	vec2 xy = fract(xyUv/5000.0);",
-			"	vec2 xz = fract(xzUv/5.0);",
+			"	vec2 xz = fract(xzUv/50.0);",
 			"	vec2 yz = fract(yzUv/5000.0);",
 			"	gl_FragColor = ( trip.x * texture2D( cliffMap, yz ) )",
 			"		+ ( mix( trip.y * texture2D( sandMap, xz ), trip.y * texture2D( grassMap, xz ), min( 1.0, vWorldPosition.y / 2400.0 ) ) );",	// todo; this fades from sand to grass as you go up. want something more generalizable/looks better
