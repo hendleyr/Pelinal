@@ -139,19 +139,33 @@ PELINAL.Player.prototype = {
 	_mesh: null, _isLoaded: false,
 	_scene: null,
 	_camera: null,
-	_cameraControls: null, _playerControls: null,
+	_cameraControls: null, 	//
+	_playerControls: null,
 	_velocity: new THREE.Vector3(),
 	_friction: 10,
 	_maxSpeed: 15,	// we want to do this in a physics tick callback
 	_impulse: 10,
 	_jumpImpulse: 50,
-	_octree: null,
-	/*		//	ANIMATIONS	-- looks like these are exported alphabetically!	*/
+	
+	/*			ORBIT CAM 		*/
+	_cameraBody: null, 
+	_idealCamPlacement: new THREE.Vector3(), _placementImpulse: new THREE.Vector3(),
+	_lookVector: new THREE.Vector3( -1, 0, 0 ),
+	_offset: new THREE.Vector3( 1, 0, 0 ),  _slideIn: 0,
+	_quat: null, _quatInverse: null,
+	_containerElement: null, _isEnabled: false,
+	_xSensitivity: -0.002, _ySensitivity: -0.002,
+	_pitch: 0, _minPitch: Math.PI / 16, _maxPitch: Math.PI - Math.PI / 16, _pitchDelta: 0,
+	_yaw: 0, _yawDelta: 0,
+	_zoom: 10, _offsetMin: 3, _offsetMax: 10,
+	/*			/ORBIT CAM 	*/
+	
+	/*			ANIMATIONS	-- looks like these are exported alphabetically!	*/
 	_backDodgeAnim: null, _bowAnim: null, _jumpAnim: null, _saluteAnim: null, _sprintAnim: null, _swordMoves1Anim: null, _waveAnim: null,
-	/*		\\	ANIMATIONS																				*/
+	/*			/ANIMATIONS																				*/
 	_loaded: false,
 	
-	_load: function ( geometry, materials ) {
+	load: function ( geometry, materials ) {
 
 		// MESH
 		this._mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshFaceMaterial( materials ) );
@@ -177,7 +191,29 @@ PELINAL.Player.prototype = {
 		
 	},
 	
-	_configAnimations: function () {
+	_physicsSetup: function ( a, b, c, d ) { 
+		this._cameraBody.setDamping( .9995, .9995 );
+		this._cameraBody.setPerObjectGravity( { x:0, y:0, z:0 } );
+		this._cameraBody.setCcdMotionThreshold( 0.1 );
+		this._cameraBody.setCcdSweptSphereRadius( 0.5 );
+		
+		this._cameraBody.addEventListener( 'collision', function( other_object, relative_velocity, relative_rotation, contact_normal ) {
+			
+			// `this` has collided with `other_object` with an impact speed of `relative_velocity` and a rotational force of `relative_rotation` and at normal `contact_normal`
+			if ( other_object === this._physicsMesh ) { 
+				return false; 
+			}	else { 
+				this._slideIn += 0.1;
+			}
+			
+		}.bind( this ) );
+		
+		this._cameraBody.position.copy( this._camera.position );
+		this._fixCameraPlacement();
+		this._cameraBody.__dirtyPosition = true;
+	},
+	
+	configAnimations: function () {
 		
 		this._backDodgeAnim = new THREE.Animation( this._mesh, this._mesh.geometry.animations[0].name, THREE.AnimationHandler.CATMULLROM );
 		this._backDodgeAnim.loop = false;
@@ -207,13 +243,6 @@ PELINAL.Player.prototype = {
 		this._waveAnim.loop = false;
 		this._waveAnim.timeScale = 40;
 		
-	},
-	
-	setSceneGraph: function ( octree ) {
-	
-		this._octree = octree;
-		this._cameraControls._octree = octree;
-	
 	},
 	
 	animate: function ( delta ) {
@@ -275,13 +304,13 @@ PELINAL.Player.prototype = {
 		
 	},
 	
-	setCameraControls: function ( cameraControls ) {
-		
-		if ( this._cameraControls ) { delete this._cameraControls; }
-		this._cameraControls = cameraControls;
-		
+	updateCamera: function ( delta ) {
+	
 	}
 	
+	_fixCamera: function ( delta ) {
+	
+	}
 },
 
 
